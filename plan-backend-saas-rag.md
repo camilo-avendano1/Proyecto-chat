@@ -1,50 +1,65 @@
-# Plan de Desarrollo — Backend (Java 21 + Spring Boot 3.x)
+# Plan de Desarrollo — Backend (Python 3.12+ / FastAPI / Clean Architecture)
 ## SaaS B2B de Asistencia Inteligente y Diagnóstico RAG Multi-Nivel (Sector Salud)
 
 > **Contexto del proyecto (para agentes o lectores sin contexto previo)**
 > Producto SaaS B2B llamado provisionalmente **[NOMBRE_PRODUCTO]**: un Core Backend y Motor RAG Multi-Nivel especializado en el sector salud.
 > El sistema recibe consultas de médicos, auditores y personal administrativo junto con **logs de error del sistema, contexto de navegación (pantallas y botones activos) y preguntas sobre cargues complejos (ej. Cáncer Tipo 2, patologías de alto costo con más de 300 variables)**, resolviendo las fallas en lenguaje técnico claro y citando normativas aplicables.
 > 
-> **División de Responsabilidades:** El equipo del cliente/partner construye el frontend de sus aplicaciones y el widget embebible; nuestro equipo construye la **API Backend Core, el Motor RAG Multi-Nivel, la Ingesta de Documentos/Logs y las Consolas de Administración**.
+> **División de Responsabilidades:** El equipo del cliente/partner construye el frontend de sus aplicaciones y el widget embebible; nuestro equipo construye la **API Backend Core (Python), el Motor RAG Multi-Nivel, la Ingesta de Documentos/FTP/Logs y las Consolas de Administración**.
 > 
-> Para el contexto de negocio completo y casos de uso, ver [especificacion-sistema-completa.md](file:///d:/Git/SaaS/especificacion-sistema-completa.md).
+> Para el contexto de negocio completo y casos de uso, ver [especificacion-sistema-completa.md](file:///d:/Git/SaaS/especificacion-sistema-completa.md) y [arquitectura-y-retos-tecnicos-python.md](file:///d:/Git/SaaS/arquitectura-y-retos-tecnicos-python.md).
 
 ---
 
 ## 1. Objetivo del Backend
 
-Construir una plataforma backend modular de alto rendimiento que proporcione:
-1. **API de Diagnóstico y Consulta en Tiempo Real (`/api/v1/diagnostic/query` y `/stream`):** Procesa consultas enriquecidas con logs de error del sistema, identificadores de botones/formularios y rol de usuario.
+Construir una plataforma backend modular de alto rendimiento en **Python 3.12+** que proporcione:
+1. **API de Diagnóstico y Consulta en Tiempo Real (`/api/v1/diagnostic/query` y `/stream` SSE):** Procesa consultas enriquecidas con logs de error del sistema, identificadores de botones/formularios y rol de usuario con streaming de baja latencia.
 2. **Motor RAG con Herencia Multi-Nivel:** Búsqueda vectorial jerárquica que combina normativas de salud globales (Nivel 1), directrices de la empresa prestadora/Account (Nivel 2) y documentación local de cada IPS/Tenant (Nivel 3).
-3. **Pipeline de Ingesta y Parseo Inteligente:** Procesamiento de resoluciones médicas en PDF, manuales de formularios complejos en Excel (300+ campos), taxonomías de botones de UI y catálogos de códigos de error.
-4. **Seguridad y Aislamiento Estricto:** Políticas RLS multinivel en PostgreSQL con `pgvector`, autenticación de widgets mediante API Key + JWT de sesión, y validación dinámica de CORS.
+3. **Pipeline de Ingesta Asíncrona con FTP & Deduplicación SHA-256:** Mapeo de botones desde la base de datos de origen, descarga de archivos desde servidores FTP, cálculo de `content_hash` para deduplicación total y parsing de PDFs y Excels de 300+ variables.
+4. **Seguridad y Aislamiento Estricto:** Políticas RLS y filtrado jerárquico en PostgreSQL con `pgvector`, autenticación de widgets mediante API Key + JWT de sesión, y validación dinámica de CORS.
 5. **Observabilidad y Ledger de Consumo:** Trazabilidad exacta de tokens (input/output/embeddings), latencias y costos atribuidos a cada Tenant y Account.
 
 ---
 
-## 2. Arquitectura del Sistema
+## 2. Arquitectura del Sistema (Clean Architecture / Hexagonal en Python)
 
-### 2.1 Estilo Arquitectónico
-Se implementa una **Arquitectura Hexagonal (Ports & Adapters)** estructurada como **Monolito Modular** en Java 21 LTS con Spring Boot 3.3+. 
-
-```
-com.tuempresa.plataforma
-│
-├── platform-core/            ← Gestión de Accounts, Tenants multinivel, API keys y roles
-├── knowledge-ingestion/      ← Parsers (PDF/Excel/JSON), chunkers especializados, embeddings
-├── knowledge-retrieval/      ← Búsqueda híbrida en pgvector, filtrado multinivel, prompt synthesis
-├── diagnostic-gateway/       ← Endpoints públicos para el widget del cliente, auth, rate limiting
-└── usage-observability/      ← Ledger de consumo de tokens, métricas y auditoría de diagnósticos
-```
-
-### 2.2 Estructura Interna por Módulo
+Se implementa una **Arquitectura Hexagonal (Ports & Adapters)** estructurada de forma modular:
 
 ```
-modulo/
-├── domain/                  ← Entidades puras, Value Objects (TenantId, DiagnosticContext), reglas de negocio
-├── application/             ← Casos de uso (DiagnoseErrorUseCase, IngestHealthNormativeUseCase) y Puertos (Interfaces)
-├── infrastructure/          ← Adaptadores: Repositorios Spring Data JPA, pgvector, Clientes WebClient (Claude/OpenAI/DeepSeek), RabbitMQ
-└── api/                     ← REST Controllers, DTOs de request/response, Mappers MapStruct, Seguridad
+backend/
+├── src/
+│   ├── domain/                         # Capa de Dominio (Pura POO, sin frameworks)
+│   │   ├── entities/                   # Entidades (Tenant, Account, Document, Chunk, UsageLedger)
+│   │   ├── value_objects/              # Scope (GLOBAL/ACCOUNT/TENANT), ContentHash, Severity
+│   │   └── exceptions/                 # TenantNotFoundException, DocumentParsingException
+│   │
+│   ├── application/                    # Casos de Uso y Puertos (Interfaces Abstractas)
+│   │   ├── ports/
+│   │   │   ├── vector_store_port.py    # Repositorio de pgvector
+│   │   │   ├── llm_port.py             # Cliente de inferencia LLM
+│   │   │   ├── embedding_port.py       # Generador de embeddings
+│   │   │   ├── ftp_client_port.py      # Cliente de descarga FTP
+│   │   │   └── source_db_port.py       # Lector de la BD de botones de ayuda
+│   │   └── use_cases/
+│   │       ├── diagnose_query_use_case.py
+│   │       ├── sync_ftp_help_buttons_use_case.py
+│   │       └── ingest_document_use_case.py
+│   │
+│   ├── infrastructure/                 # Adaptadores de Infraestructura y Drivers
+│   │   ├── db/                         # PostgreSQL + SQLAlchemy 2.0 Async + asyncpg
+│   │   │   ├── models/                 # Modelos ORM relacionales y vectoriales
+│   │   │   └── repositories/           # Implementación concreta de VectorStorePort
+│   │   ├── ai/                         # Adaptadores LiteLLM / AsyncOpenAI / Anthropic
+│   │   ├── ftp/                        # Adaptador aioftp
+│   │   └── workers/                    # Workers asíncronos para tareas en background
+│   │
+│   └── api/                            # Adaptador Primario (FastAPI Framework)
+│       ├── v1/
+│       │   ├── diagnostic_router.py    # Endpoints de consulta y streaming SSE
+│       │   ├── session_router.py       # Autenticación y emisión de JWT para el widget
+│       │   └── admin_router.py         # Endpoints para las consolas web de gestión
+│       └── middlewares/                # CORS dinámico, API Key validation, Rate Limiting
 ```
 
 **Regla de Dependencia Estricta:** `api` $\rightarrow$ `application` $\rightarrow$ `domain`. La capa `infrastructure` implementa los puertos definidos en `application`. El dominio permanece 100% agnóstico de frameworks.
@@ -55,21 +70,23 @@ modulo/
 
 | Componente | Tecnología Seleccionada | Justificación Técnica |
 |---|---|---|
-| **Lenguaje / Runtime** | Java 21 LTS (Virtual Threads habilitados) | Alta concurrencia sin bloqueo de hilos en llamadas I/O intensivas a APIs de IA y base de datos. |
-| **Framework Base** | Spring Boot 3.3+ / Spring Security | Ecosistema enterprise, inyección de dependencias robusta, soporte para GraalVM y Virtual Threads. |
-| **Persistencia & Vectores** | PostgreSQL 16 + extensión `pgvector` | Base unificada para datos relacionales, JSONB y vectores; soporte de índices HNSW para búsqueda rápida por similitud de coseno. |
-| **Integración con IA / LLMs** | Spring WebClient reactivo / Spring AI | Comunicación asíncrona no bloqueante con DeepSeek, Claude 3.5 Sonnet y OpenAI GPT-4o. |
-| **Colas de Procesamiento** | RabbitMQ (o Cloud Pub/Sub en GCP) | Desacoplamiento de la ingesta pesada de PDFs normativos y Excels de 300+ campos del tráfico interactivo. |
-| **Migraciones de BD** | Flyway | Control de versiones auditable del esquema SQL y políticas RLS multinivel. |
-| **Testing** | JUnit 5 + Mockito + Testcontainers (PostgreSQL con pgvector real) | Validación automatizada y rigurosa del aislamiento RLS y precisión de búsqueda vectorial. |
-| **Documentación de API** | Springdoc-OpenAPI (Swagger v3) | Generación automática de contratos para el equipo de frontend del cliente. |
+| **Lenguaje / Runtime** | Python 3.12+ (AsyncIO) | Ecosistema líder en IA, procesamiento de texto/tablas y soporte nativo asíncrono para I/O intensivo. |
+| **Framework Web API** | FastAPI + Pydantic v2 | Alto rendimiento (comparable a Go/Node), tipado estricto con validaciones en Rust y generación automática de OpenAPI. |
+| **Persistencia & Vectores** | PostgreSQL 16 + extensión `pgvector` | Base unificada para datos relacionales, JSONB y vectores con soporte de índices HNSW para búsqueda ultrarrápida. |
+| **ORM / Acceso a Datos** | SQLAlchemy 2.0 Async + `asyncpg` | Acceso asíncrono no bloqueante a PostgreSQL con soporte para el tipo `Vector` de pgvector. |
+| **Integración con IA / LLMs** | LiteLLM / AsyncOpenAI / Anthropic SDKs | Puertos desacoplados para alternar dinámicamente entre DeepSeek, Claude 3.5 Sonnet y GPT-4o. |
+| **Parsing Documental & Tablas** | `openpyxl`, `pdfplumber`, `BeautifulSoup4` | Extracción precisa de matrices Excel de 300+ variables, PDFs normativos y contenido HTML de botones. |
+| **Cliente FTP Asíncrono** | `aioftp` | Descarga de archivos remotos desde los servidores FTP de los clientes sin bloquear el event loop. |
+| **Procesamiento en Background** | AsyncIO Background Tasks / Celery / ARQ | Ejecución programada (cron) y sincronización de fuentes documentales. |
+| **Migraciones de BD** | Alembic | Control de versiones auditable del esquema SQL, extensiones vectoriales e índices HNSW. |
+| **Testing** | `pytest` + `pytest-asyncio` + Testcontainers | Pruebas unitarias de casos de uso y pruebas de integración contra PostgreSQL/pgvector real. |
 
 ---
 
 ## 4. Modelo de Datos y Esquema SQL Multi-Nivel
 
 ```sql
--- Habilitar extensiones requeridas
+-- Extensiones requeridas
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "vector";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
@@ -89,7 +106,7 @@ CREATE TABLE tenants (
     tenant_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     account_id UUID NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
     nombre VARCHAR(255) NOT NULL,
-    codigo_ips VARCHAR(100), -- Identificador clínico de la entidad
+    codigo_ips VARCHAR(100), -- Identificador clínico (ej. Sura, Sanitas, etc.)
     dominios_permitidos TEXT[] NOT NULL DEFAULT '{}',
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -105,7 +122,7 @@ CREATE TABLE api_keys (
     revoked_at TIMESTAMP WITH TIME ZONE
 );
 
--- 3. Base de Conocimiento Jerárquica
+-- 3. Base de Conocimiento Jerárquica con Control de Hash
 CREATE TYPE knowledge_scope_enum AS ENUM ('GLOBAL', 'ACCOUNT', 'TENANT');
 CREATE TYPE document_category_enum AS ENUM (
     'NORMATIVA_SALUD',      -- Resoluciones del ministerio, guías clínicas
@@ -121,10 +138,12 @@ CREATE TABLE knowledge_documents (
     tenant_id UUID REFERENCES tenants(tenant_id) ON DELETE CASCADE,
     titulo VARCHAR(255) NOT NULL,
     categoria document_category_enum NOT NULL,
-    tipo_archivo VARCHAR(50) NOT NULL, -- PDF, XLSX, JSON
-    version VARCHAR(20) DEFAULT '1.0',
-    estado_procesamiento VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    metadatos_doc JSONB DEFAULT '{}',
+    source_url TEXT,                              -- Ruta en FTP o URL de origen
+    content_hash VARCHAR(64) NOT NULL,            -- SHA-256 del contenido (para deduplicación)
+    version INT NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    metadatos_doc JSONB DEFAULT '{}',             -- { "button_id": "btn_radicar", "screen": "RADICACION" }
+    last_checked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT chk_scope_ids CHECK (
         (scope = 'GLOBAL' AND account_id IS NULL AND tenant_id IS NULL) OR
@@ -141,17 +160,19 @@ CREATE TABLE knowledge_chunks (
     tenant_id UUID REFERENCES tenants(tenant_id),
     categoria document_category_enum NOT NULL,
     contenido TEXT NOT NULL,
-    embedding VECTOR(1536) NOT NULL, -- Vector de OpenAI/DeepSeek
-    metadatos_chunk JSONB NOT NULL DEFAULT '{}', -- campos: { cod_error: 'ERR_CANCER_02', boton: 'btn_radicar', form: 'CANCER_T2' }
+    embedding VECTOR(1536) NOT NULL,              -- Vector de OpenAI (text-embedding-3-small) o DeepSeek
+    metadatos_chunk JSONB NOT NULL DEFAULT '{}',  -- { "campo": "estadio_tnm", "cod_error": "ERR_MED_TNM_404" }
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Índices Vectoriales y de Búsqueda
+-- Índices HNSW, GIN y de Jerarquía
 CREATE INDEX idx_chunks_embedding_hnsw ON knowledge_chunks 
 USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 CREATE INDEX idx_chunks_metadata_gin ON knowledge_chunks USING gin (metadatos_chunk);
-CREATE INDEX idx_chunks_hierarchy ON knowledge_chunks (scope, account_id, tenant_id, categoria);
+CREATE INDEX idx_docs_content_hash ON knowledge_documents (content_hash);
+CREATE INDEX idx_chunks_hierarchy ON knowledge_chunks (scope, account_id, tenant_id, is_active, categoria);
 
 -- 4. Ledger de Consumo y Diagnósticos
 CREATE TABLE ai_usage_ledger (
@@ -167,60 +188,41 @@ CREATE TABLE ai_usage_ledger (
 );
 ```
 
-### 4.1 Políticas RLS Multi-Nivel
-A nivel de base de datos, el usuario de aplicación consulta utilizando variables de sesión fijadas por la transacción:
-
-```sql
-ALTER TABLE knowledge_chunks ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY multi_level_retrieval_policy ON knowledge_chunks
-FOR SELECT USING (
-    scope = 'GLOBAL'
-    OR (scope = 'ACCOUNT' AND account_id = current_setting('app.current_account_id', true)::uuid)
-    OR (scope = 'TENANT' AND tenant_id = current_setting('app.current_tenant_id', true)::uuid)
-);
-```
-
 ---
 
-## 5. Pipeline de Ingesta Inteligente Especializada
+## 5. Pipeline de Ingesta: BD de Botones + FTP + Hash Deduplication
 
 ```mermaid
 flowchart TD
-    DocUpload[Documento: PDF Normativa / Excel 300 campos / JSON UI] --> Queue[Cola RabbitMQ / PubSub]
-    Queue --> Worker[Worker de Ingesta Asíncrona]
+    Cron([Cron Semanal / Worker]) --> QuerySourceDB[1. Lee BD de Botones de Ayuda: Rutas, HTML y URLs FTP]
+    QuerySourceDB --> LoopButtons{Para cada botón}
     
-    Worker --> Dispatcher{Tipo de Documento}
+    LoopButtons --> DownloadFTP[2. Descarga archivo PDF/XLSX vía aioftp]
+    DownloadFTP --> CalcHash[3. Calcula Hash SHA-256 del contenido]
     
-    Dispatcher -->|PDF Normativo / Revista| PdfParser[Parser Semántico PDF: Títulos, Artículos, Resoluciones]
-    Dispatcher -->|Excel Cargue Cáncer T2| XlsxParser[Parser Tabular: Mapeo de 300+ campos, tipos de dato y reglas]
-    Dispatcher -->|JSON UI / Catálogo Errores| JsonParser[Parser Estructurado: Botones, Pantallas, Códigos de Log]
+    CalcHash --> CheckDB[(4. SELECT * FROM knowledge_documents WHERE content_hash = :hash)]
     
-    PdfParser --> HierarchicalChunker[Chunker Semántico Jerárquico]
-    XlsxParser --> HierarchicalChunker
-    JsonParser --> HierarchicalChunker
+    CheckDB --> Exists{¿Existe Hash?}
     
-    HierarchicalChunker --> Embedder[Generador de Embeddings: text-embedding-3-small / DeepSeek]
-    Embedder --> PgVector[(PostgreSQL + pgvector)]
+    Exists -->|SÍ: Mismo Hash| Touch[5A. Actualiza last_checked_at. 0 tokens gastados]
+    Exists -->|NO: Nuevo o Modificado| ParseDoc[5B. Parser Especializado: Tablas Excel / PDF / HTML]
+    
+    ParseDoc --> SemanticChunk[6. Chunking semántico por módulos de datos]
+    SemanticChunk --> Embeddings[7. Generación de Embeddings asíncrona]
+    Embeddings --> InsertVector[(8. Inserta Chunks en pgvector con scope: ACCOUNT o TENANT)]
+    
+    InsertVector --> Next[Siguiente botón]
+    Touch --> Next
+    Next --> LoopButtons
 ```
-
-### Estrategias de Chunking por Tipo de Contenido
-1. **Normativas de Salud y Revistas Clínicas (PDF):**
-   - Chunking por artículos/secciones normativas respetando la jerarquía legal (ej. "Artículo 4 - Obligatoriedad de reporte de Cáncer Gástrico").
-   - Preservación de citas bibliográficas y números de resolución en el metadato.
-2. **Guías de Cargue de Datos Complejos (Excel / 300+ Campos):**
-   - Agrupación por módulos de datos (ej. "Datos del Paciente", "Estadificación TNM", "Tratamiento Quimioterapéutico", "Validaciones de Fecha").
-   - Cada chunk incluye el nombre del campo, tipo de dato esperado, regla de obligatoriedad y código de error asociado si falla la validación.
-3. **Mapeo de UI, Botones y Logs de Error:**
-   - Indexación directa de códigos de error (ej. `ERR_VAL_042`, `HTTP_500_SOAP_RADICACION`) vinculados a la pantalla y botón exacto de donde se originan.
 
 ---
 
 ## 6. Pipeline de Retrieval y Diagnóstico en Tiempo Real
 
-### 6.1 Contrato del Endpoint de Diagnóstico
+### 6.1 Contrato del Endpoint de Diagnóstico y Streaming
 
-`POST /api/v1/diagnostic/query`
+`POST /api/v1/diagnostic/stream` (o `/query` para modo síncrono)
 
 **Payload de Entrada (Enviado por el widget del cliente):**
 ```json
@@ -248,65 +250,22 @@ flowchart TD
    - Chunks de directrices del Account prestador (Nivel 2).
    - Chunks de normativas de salud globales (Nivel 1).
 3. **Keyword Matching (Trigram / Full-Text):** Búsqueda exacta del código de error extraído del log (`ERR_MED_TNM_404`).
-4. **Re-Ranking:** Ponderación con mayor prioridad a chunks que coincidan exactamente con el código de error y el formulario activo.
-
-### 6.3 Prompt Engine Especializado (Persona Médica / Auditor)
-
-```text
-Eres el Asistente Técnico y Normativo Especializado para Plataformas de Salud de [NOMBRE_PRODUCTO].
-Tu objetivo es guiar a médicos, auditores y personal asistencial para resolver dudas de diligenciamiento y errores de sistema.
-
-CONTEXTO DEL USUARIO:
-- Rol: {{user_profile.role}}
-- Pantalla Activa: {{ui_context.active_screen}} (Botón: {{ui_context.active_button_id}})
-- Formulario: {{ui_context.form_code}}
-- Log de Error Detectado: {{system_logs}}
-
-DOCUMENTACIÓN TÉCNICA Y NORMATIVA RECUPERADA:
-{{retrieved_chunks}}
-
-INSTRUCCIONES DE RESPUESTA:
-1. Responde en español con un tono profesional, técnico-médico claro y directo.
-2. Si se detecta un error de log:
-   a. Explica la causa raíz en términos funcionales (qué dato falta o qué validación normativa falló).
-   b. Proporciona los pasos exactos de solución en la interfaz (qué campo corregir o qué botón presionar).
-   c. Cita la resolución o guía técnica de soporte correspondiente.
-3. No uses tecnicismos de programación genéricos innecesarios; traduce el error al proceso clínico/administrativo correspondiente.
-```
-
-**Payload de Respuesta:**
-```json
-{
-  "response": "Estimado Dr. Pérez, el error **ERR_MED_TNM_404** ocurre porque para el tipo de neoplasia seleccionado (Cáncer Tipo 2), el campo **Estadificación Clínica TNM** es de diligenciamiento obligatorio según la Resolución de Cuentas de Alto Costo.\n\n### Pasos para solucionarlo:\n1. Ubíquese en la pestaña **Estadificación y Diagnóstico** del formulario.\n2. Ingrese los valores de Tumor (T), Nódulo (N) y Metástasis (M).\n3. Haga clic nuevamente en el botón **Validar y Radicar**.\n\n*Fuente: Guía Técnica de Cargue de Cáncer v3.2 (Sección 4.1) y Resolución Ministerial 0247.*",
-  "error_diagnostic": {
-    "detected_code": "ERR_MED_TNM_404",
-    "affected_field": "estadio_clinico_tnm",
-    "severity": "BLOCKING"
-  },
-  "sources": [
-    {
-      "document_title": "Guía_Cargue_Cancer_Alto_Costo_2026.pdf",
-      "scope": "GLOBAL",
-      "section": "Sección 4.1 - Validación TNM"
-    }
-  ]
-}
-```
+4. **Re-Ranking:** Ponderación con mayor prioridad a chunks que coincidan exactamente con el código de error, el formulario activo y el nivel de Tenant.
 
 ---
 
 ## 7. Fases de Desarrollo del Backend (3 Meses)
 
 ```
-Mes 1: Core & Ingesta Inteligente
-├── Sem 1-2: Arquitectura Hexagonal, Modelo SQL en pgvector con RLS multinivel, auth de API keys
-└── Sem 3-4: Parsers de PDFs normativos, Excel (300+ campos) y JSON de botones/errores
+Mes 1: Core Python, Clean Architecture & Ingesta FTP con Hashing
+├── Sem 1-2: Setup FastAPI, SQLAlchemy 2.0 Async, pgvector, modelo SQL y auth de API keys
+└── Sem 3-4: Conector a BD de botones, cliente aioftp, deduplicación SHA-256 y parsers PDF/XLSX
 
-Mes 2: Retrieval Jerárquico & Diagnostic API
+Mes 2: Retrieval Jerárquico & Diagnostic API con SSE
 ├── Sem 5-6: Pipeline de búsqueda híbrida multinivel y re-ranking en pgvector
-└── Sem 7-8: Endpoint de diagnóstico (/api/v1/diagnostic/query y SSE), prompt engine médico
+└── Sem 7-8: Endpoint de diagnóstico (/query y /stream SSE), prompt engine médico especializado
 
 Mes 3: Observabilidad, Hardening & Piloto
 ├── Sem 9-10: Ledger de consumo de tokens por Tenant, rate limiting, validación CORS dinámica
-└── Sem 11-12: Pruebas de carga, integración end-to-end con widget del partner y despliegue piloto
+└── Sem 11-12: Despliegue en GCP (Cloud Run + Cloud SQL), integración con widget del partner y piloto
 ```

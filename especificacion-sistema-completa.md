@@ -150,10 +150,10 @@ graph TD
 
 | Área | Decisión | Motivo |
 |---|---|---|
-| **Backend Core** | Java 21 LTS + Spring Boot 3.x | Rendimiento enterprise, Virtual Threads para I/O no bloqueante con APIs de IA, tipado robusto. |
-| **Motor Vectorial y Relacional** | PostgreSQL 16 + `pgvector` | Unificación de datos relacionales, métricas y vectores en un solo motor con RLS nativo. |
-| **Framework RAG / IA** | Spring AI / LangChain4j + WebClient | Abstracción limpia mediante puertos (`EmbeddingProviderPort`, `LlmProviderPort`) que permite alternar entre DeepSeek, Claude y OpenAI. |
-| **Procesamiento Asíncrono** | RabbitMQ / Cloud Pub/Sub | Desacoplamiento de la ingesta pesada de documentos y parseo de Excel/PDF. |
+| **Backend Core** | Python 3.12+ (FastAPI + Pydantic v2) | Ecosistema líder nativo en IA y procesamiento de datos, tipado estricto, alto rendimiento asíncrono (AsyncIO/uvicorn) y Clean Architecture. |
+| **Motor Vectorial y Relacional** | PostgreSQL 16 + `pgvector` | Unificación de datos relacionales, JSONB, métricas y vectores en un solo motor con soporte HNSW y RLS nativo. |
+| **Framework RAG / IA** | Arquitectura Limpia con Puertos (`EmbeddingPort`, `LlmPort`) | Abstracción limpia mediante POO que permite alternar entre DeepSeek, Claude 3.5 Sonnet y OpenAI GPT-4o vía LiteLLM / Async SDKs. |
+| **Ingesta & Sincronización FTP/BD** | Worker Asíncrono (Python / aioftp / Celery) | Extracción de BD de botones, descarga de archivos desde FTP y deduplicación por hashing SHA-256 (`content_hash`). |
 | **Frontend Consolas** | React 18 + TypeScript + Vite + Tailwind | Interfaz ágil, tipada y modular para administración y monitoreo de la base de conocimiento. |
 | **Widget Embebible** | A cargo del equipo del cliente | Desarrollado por el partner consumiendo nuestro contrato de API REST / SSE. |
 
@@ -167,14 +167,15 @@ graph TD
 
 | Mes | Backend y Motor RAG | Consola de Administración (Admin/Super) | Integración con Partner (Front/Widget) |
 |---|---|---|---|
-| **Mes 1** | Arquitectura base, esquema `pgvector` multi-nivel, RLS, módulo `platform-core` y parser de normativas PDF y Excel (300+ campos). | Auth, layout modular, gestión de cuentas y Tenants. | Publicación del contrato OpenAPI y sandbox de pruebas para el equipo frontend del partner. |
-| **Mes 2** | Pipeline de vectorización jerárquico (Nivel 1, 2 y 3), motor de búsqueda híbrida, API de diagnóstico (`/api/v1/diagnostic/query`) con inyección de logs. | Gestor de base de conocimiento (upload y monitoreo de parseo) + Playground de pruebas RAG. | Pruebas de integración del widget contra el sandbox de diagnóstico con logs médicos simulados. |
+| **Mes 1** | Arquitectura base Python (Clean Architecture), esquema `pgvector` multi-nivel, RLS, módulo `platform-core` y parser de normativas PDF y Excel (300+ campos) con sync FTP y hashing SHA-256. | Auth, layout modular, gestión de cuentas y Tenants. | Publicación del contrato OpenAPI y sandbox de pruebas para el equipo frontend del partner. |
+| **Mes 2** | Pipeline de vectorización jerárquico (Nivel 1, 2 y 3), motor de búsqueda híbrida, API de diagnóstico (`/api/v1/diagnostic/query` y `/stream` SSE) con inyección de logs y contexto UI. | Gestor de base de conocimiento (upload y monitoreo de parseo) + Playground de pruebas RAG. | Pruebas de integración del widget contra el sandbox de diagnóstico con logs médicos simulados. |
 | **Mes 3** | Optimización de prompts médicos, re-ranking de respuestas, módulo de observabilidad y tracking de costos, hardening de seguridad y rate limiting. | Dashboards de consumo de tokens y auditoría de consultas por Tenant; consola Super-Admin completa. | Despliegue piloto con los primeros Tenants de salud y validación de casos reales de cargue (cáncer tipo 2). |
 
 ---
 
 ## 8. Documentos relacionados
 
-- [plan-backend-saas-rag.md](file:///d:/Git/SaaS/plan-backend-saas-rag.md) — Arquitectura técnica, diseño de módulos, esquemas SQL multi-nivel y pipelines RAG.
+- [arquitectura-y-retos-tecnicos-python.md](file:///d:/Git/SaaS/arquitectura-y-retos-tecnicos-python.md) — Arquitectura técnica integral en Python, retos de ingesta FTP, deduplicación SHA-256 y despliegue Local / GCP.
+- [plan-backend-saas-rag.md](file:///d:/Git/SaaS/plan-backend-saas-rag.md) — Diseño de módulos en Python 3.12+, esquemas SQL multi-nivel y pipelines RAG.
 - [plan-frontend-consolas.md](file:///d:/Git/SaaS/plan-frontend-consolas.md) — Arquitectura de las consolas de administración y observabilidad de la base de conocimiento.
 - [especificacion-api-integracion-widget.md](file:///d:/Git/SaaS/especificacion-api-integracion-widget.md) — Especificación formal de la API para que el equipo de frontend del cliente integre el widget.
