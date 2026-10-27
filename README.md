@@ -1,69 +1,86 @@
-# [NOMBRE_PRODUCTO] — SaaS B2B de Asistencia Inteligente y Diagnóstico RAG Multi-Nivel (Sector Salud)
+# SaaS Core Chat, Diagnóstico Técnico & Gateway Multi-Cliente
 
-## ¿Qué es?
+**Desarrollado por:** Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno  
 
-Un **Core Backend y Motor RAG (Retrieval-Augmented Generation) Multi-Nivel** de alta precisión diseñado para plataformas del sector salud. El sistema asiste a médicos, auditores y personal administrativo en la resolución de errores de cargue masivo de datos (ej. patologías de alto costo como Cáncer Tipo 2, formularios de más de 300 variables), traducción de logs de error de sistema y orientación sobre normativas médicas vigentes.
+Plataforma SaaS de asistencia técnica e inteligencia artificial basada en arquitectura de microservicios (**FastAPI + React/Vite**), diseñada para orientar a **médicos, enfermeros, radicadores, auditores y analistas** en el diligenciamiento, validación y cargue de **diferentes formularios y archivos en múltiples formatos** (`CSV`, `TXT`, `XML`, `JSON`, `ZIP`, formularios web) conforme a sus reglamentos técnicos.
 
 ---
 
-## División de Responsabilidades entre Equipos
+## 🏛️ Principios de Arquitectura
 
+1. **System Prompt Desacoplado (Rol de Asistente Técnico):**
+   - El System Prompt define exclusivamente el rol del asistente como soporte técnico para el diligenciamiento y validación de formularios en distintos formatos.
+   - No contiene reglamentos ni catálogos de variables quemados en el código.
+2. **Contexto Normativo 100% Guiado por Búsqueda (`back-busqueda` / RAG):**
+   - Las situaciones específicas, definiciones de campos/variables, manuales operativos y reglamentos provienen dinámicamente del servicio de búsqueda (`back-busqueda`) para darle contexto preciso al LLM en el momento de preguntar.
+3. **Aislamiento de Microservicios, Seguridad y Auditoría (Ley 1581 de 2012):**
+   - Sanitización obligatoria de datos personales/clínicos (PII/PHI) antes de consultar al buscador o al LLM.
+   - Guardrails pre-LLM con respuesta rápida (0 tokens) para saludos/cortesías y bloqueo de Prompt Injection.
+   - Contabilidad detallada de tokens, costos y latencia por cliente, tenant, usuario, rol y modelo.
+
+---
+
+## 📂 Estructura del Repositorio
+
+Todo el código fuente de los microservicios y la documentación técnica se encuentra organizado dentro del directorio [`codigo/`](codigo/):
+
+```text
+Proyecto-chat/
+├── .gitignore
+├── README.md                                  # Descripción general del repositorio
+└── codigo/
+    ├── ARQUITECTURA_MICROSERVICIOS.md         # Arquitectura detallada, puertos y diagramas
+    ├── GUIA_PETICIONES_CURL.md                # Colección de peticiones cURL y contratos REST/SSE
+    ├── iniciar-servicios.ps1                  # Script PowerShell para levantar todos los servicios
+    ├── auth-service/                          # Puerto 8002: Autenticación JWT, API Keys SHA-256 y Admins (bcrypt)
+    ├── back-chat/                             # Puerto 8000: Orquestador técnico, Guardrails, PII Sanitizer y RAG
+    │   ├── README.md                          # Documentación del orquestador back-chat
+    │   └── FLUJO_INFORMACION_Y_BUSQUEDA.md    # Detalle del flujo entre System Prompt, Logs y back-busqueda
+    ├── llm-gateway/                           # Puerto 8003: Gateway de inferencia LLM y Ledger de tokens/costos
+    └── FRONT-MOCK/                            # Puerto 5173: Simulador interactivo del Widget y Panel Admin
+        └── README.md                          # Guía del simulador frontend
 ```
-┌────────────────────────────────────────────────────────┐
-│  Equipo del Cliente / Partner                           │
-│  - Frontend de la plataforma web clínica               │
-│  - Desarrollo e integración del Widget Embebible       │
-│  - Captura de contexto UI y envío de logs de error     │
-└──────────────────────────┬─────────────────────────────┘
-                           │ Consumo vía REST / SSE API
-┌──────────────────────────▼─────────────────────────────┐
-│  Nuestro Equipo                                         │
-│  - API Backend Core (Python 3.12+ / FastAPI / AsyncIO) │
-│  - Motor RAG Multi-Nivel y Búsqueda Híbrida (pgvector) │
-│  - Ingesta de Normativas, Excels, FTP y Logs (Workers) │
-│  - Consolas de Administración y Observabilidad (React) │
-└────────────────────────────────────────────────────────┘
+
+---
+
+## 🚀 Inicio Rápido
+
+### 1. Levantar todos los servicios (Windows PowerShell)
+
+```powershell
+cd codigo
+.\iniciar-servicios.ps1
+```
+
+| Servicio | Puerto | Descripción |
+|---|---|---|
+| **`auth-service`** | `8002` | Handshake de sesiones de widget (`X-Widget-Key`) y login administrativo (`SUPERADMIN` / `CLIENT_ADMIN`). |
+| **`llm-gateway`** | `8003` | Proxy de inferencia hacia LM Studio, Ollama u OpenAI y contabilidad de tokens por usuario/rol/tenant. |
+| **`back-chat`** | `8000` | Orquestador de asistencia técnica de formularios, conexión con `back-busqueda` (:8001) y streaming SSE. |
+| **`FRONT-MOCK`** | `5173` | Consola web interactiva para simular escenarios de formularios, formatos, perfiles y observabilidad. |
+
+### 2. Ejecutar Pruebas Automatizadas (`pytest`)
+
+```powershell
+# 1. Auth Service (11 pruebas)
+cd codigo/auth-service
+$env:DISABLE_SQLALCHEMY_CEXT="1"; pytest -v
+
+# 2. LLM Gateway (10 pruebas)
+cd ../llm-gateway
+$env:DISABLE_SQLALCHEMY_CEXT="1"; pytest -v
+
+# 3. Back Central Chat (41 pruebas)
+cd ../back-chat
+$env:DISABLE_SQLALCHEMY_CEXT="1"; pytest -v
 ```
 
 ---
 
-## Jerarquía de Conocimiento Multi-Nivel
+## 📖 Documentación Técnica Detallada
 
-```
-Platform (Dueño del SaaS - Super Admin)
-  └── Account (Empresa Prestadora de Salud / Revendedor)
-        ├── Nivel 1: Normativas Globales de Salud & Revistas Médicas (Heredado)
-        ├── Nivel 2: Directrices y Procesos Operativos del Account
-        └── Tenants (14+ IPSs / Clínicas / Sedes Clientes como Sura, Sanitas)
-              ├── Nivel 3: Documentación Local y Parametrizaciones de Sede
-              └── Usuarios Finales (Médicos Especialistas, Auditores, Radicadores)
-```
-
----
-
-## Componentes del Sistema
-
-| Componente | Responsable | Funcionalidad Principal | Stack Tecnológico |
-|---|---|---|---|
-| **API Backend Core & RAG** | Nuestro Equipo | Ingesta multinivel, parsing de PDFs normativos, Excels de 300+ campos, FTP sync con hashing SHA-256, recuperación jerárquica y diagnóstico con logs. | Python 3.12+, FastAPI, Pydantic v2, SQLAlchemy 2.0 Async, PostgreSQL 16 + `pgvector`, Clean Architecture |
-| **Consola Account Admin** | Nuestro Equipo | Gestión de los Tenants, gestor documental con estados de ingesta, playground de pruebas RAG y métricas de tokens. | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, TanStack Query |
-| **Consola Super-Admin** | Nuestro Equipo | Visión global de Accounts, cuotas de tokens, salud del sistema y control de infraestructura. | React 18, TypeScript (mismo codebase de consolas) |
-| **Widget Embebible & Host App** | Equipo Partner | Interfaz de chat integrada en la web clínica, captura de logs de error y contexto de botones/rutas. | JS/React del cliente consumiendo nuestro API vía SSE/REST |
-
----
-
-## Casos de Uso Destacados
-
-1. **Cargue de Documentos de Alto Costo (ej. Cáncer Tipo 2):** Guía al usuario en el diligenciamiento de formularios de más de 300 campos, validando reglas normativas antes de la radicación.
-2. **Diagnóstico Técnico-Médico de Logs:** Recibe trazas de error del sistema y las traduce a explicaciones claras indicando qué campo corregir y en qué pantalla.
-3. **Mapeo de UI, Botones y FTP Sync:** Sincroniza instructivos desde bases de datos de botones de ayuda y archivos FTP, deduplicando por hash de contenido.
-
----
-
-## Documentación del Proyecto
-
-1. [arquitectura-y-retos-tecnicos-python.md](file:///d:/Git/SaaS/arquitectura-y-retos-tecnicos-python.md) — **Arquitectura Integral en Python, Retos Técnicos, Deduplicación por Hashing, FTP Sync y Despliegue Local / GCP.**
-2. [especificacion-sistema-completa.md](file:///d:/Git/SaaS/especificacion-sistema-completa.md) — Visión integral del sistema, glosario, modelo de negocio y arquitectura funcional.
-3. [plan-backend-saas-rag.md](file:///d:/Git/SaaS/plan-backend-saas-rag.md) — Arquitectura técnica en Python 3.12+ (Clean Architecture), esquema SQL multinivel en `pgvector`, RLS y pipeline RAG.
-4. [plan-frontend-consolas.md](file:///d:/Git/SaaS/plan-frontend-consolas.md) — Arquitectura de las consolas de administración, gestor documental y playground de diagnóstico.
-5. [especificacion-api-integracion-widget.md](file:///d:/Git/SaaS/especificacion-api-integracion-widget.md) — Contrato formal de API REST/SSE y guía de integración para el equipo frontend del partner.
+- **[Arquitectura de Microservicios](codigo/ARQUITECTURA_MICROSERVICIOS.md)**
+- **[Flujo de Información, System Prompt y Búsqueda RAG](codigo/back-chat/FLUJO_INFORMACION_Y_BUSQUEDA.md)**
+- **[Guía de Peticiones cURL y Contratos de Integración](codigo/GUIA_PETICIONES_CURL.md)**
+- **[Documentación de `back-chat`](codigo/back-chat/README.md)**
+- **[Documentación de `FRONT-MOCK`](codigo/FRONT-MOCK/README.md)**

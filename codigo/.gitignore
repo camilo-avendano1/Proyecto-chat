@@ -1,0 +1,24 @@
+# Hereda reglas para ejecución dentro de /codigo
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.db
+*.db-shm
+*.db-wal
+data/
+**/data/
+logs/
+**/logs/
+*.log
+*.jsonl
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.DS_Store
+Thumbs.db

@@ -1,37 +1,72 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
+# =============================================================================
+# .gitignore - SaaS Core Chat, Búsqueda RAG & Gateway Multi-Cliente
+# =============================================================================
 
-# Environment variables & secrets
+# 1. Carpetas locales de agentes, configuraciones de IDE y notas/reuniones
+.agents/
+.claude/
+.vscode/
+.idea/
+reuniones/
+
+# 2. Variables de entorno y secretos (se conserva .env.example)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 *.pem
 *.key
 
-# Build & Cache outputs
-dist/
-build/
-out/
-.next/
-.cache/
-*.tsbuildinfo
+# 3. Entornos virtuales y cachés de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Logs
-logs
+# 4. Bases de datos locales SQLite y archivos temporales WAL/SHM
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+codigo/data/
+codigo/*/data/
+
+# 5. Logs de ejecución y auditoría local
+logs/
+**/logs/
 *.log
+*.jsonl
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# IDE & Editors
-.vscode/
-.idea/
-*.swp
-*.swo
+# 6. Dependencias y compilados de Frontend (Node / Vite)
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+out/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# 7. Archivos del Sistema Operativo
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
