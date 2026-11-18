@@ -22,7 +22,7 @@ from src.core.logging_system import request_id_ctx, setup_logging
 from src.domain.exceptions import DomainException, SecurityException
 from src.infrastructure.security.audit_logger import audit_logger
 from src.routers.admin_logs_router import router as admin_logs_router
-from src.routers.diagnostic_router import router as diagnostic_router
+from src.routers.diagnostic_router import chat_router, router as diagnostic_router
 from src.routers.health_router import router as health_router
 from src.routers.session_router import router as session_router
 
@@ -97,9 +97,9 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=(
-        "Core Backend SaaS y Gateway de Diagnóstico en tiempo real. "
+        "Core Backend SaaS Multi-Cliente y Gateway de Chat RAG y Diagnóstico en tiempo real. "
         "Desarrollado por Juan Camilo Avendaño, Fran Sneider Quincha y Adriana Moreno. "
-        "Orquesta consultas para clientes empresariales (incluyendo la plataforma clínica SIGIRES / Procex Software S.A.S). "
+        "Orquesta consultas conversacionales y técnicas para múltiples clientes empresariales. "
         "Gestiona sesiones multi-cliente, sanitiza PII (Ley 1581 de 2012), enruta búsquedas RAG a las APIs correspondientes, "
         "aplica Guardrails de seguridad contra inyecciones y filtra consultas triviales para ahorro de tokens."
     ),
@@ -201,6 +201,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # Include Routers
 app.include_router(session_router)
+app.include_router(chat_router)
 app.include_router(diagnostic_router)
 app.include_router(health_router)
 app.include_router(admin_logs_router)

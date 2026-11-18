@@ -5,7 +5,7 @@ Preserves 100% compatibility with existing widget integration contracts.
 """
 
 from typing import Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from src.core.exceptions import AuthenticationError, ForbiddenError, ServiceError
@@ -24,8 +24,8 @@ router = APIRouter(prefix="/api/v1/widget", tags=["Widget Authentication"])
     description="Valida la API Key pública del Tenant/Empresa, verifica la lista blanca de dominios y emite el JWT de sesión."
 )
 async def create_widget_session(
-    body: SessionCreateRequest,
     request: Request,
+    body: Optional[SessionCreateRequest] = Body(default=None),
     x_widget_key: str = Header(..., alias="X-Widget-Key", description="API Key pública del Tenant o Empresa"),
     db: Session = Depends(get_db),
 ):
@@ -33,14 +33,16 @@ async def create_widget_session(
         x_forwarded_for=request.headers.get("x-forwarded-for"),
         x_real_ip=request.headers.get("x-real-ip"),
     )
+    effective_origin = (body.origin if body and body.origin else None) or request.headers.get("origin") or ""
     service = WidgetSessionService(db)
     try:
         session = service.create_session(
             api_key=x_widget_key,
-            origin=body.origin,
-            eps_id=body.eps_id,
-            ips_code=body.ips_code,
-            client_id=body.client_id,
+            origin=effective_origin,
+            client_id=body.client_id if body else None,
+            metadata=body.metadata if body else None,
+            eps_id=body.eps_id if body else None,
+            ips_code=body.ips_code if body else None,
             ip_address=ip,
         )
         return SessionResponse(

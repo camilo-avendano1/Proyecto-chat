@@ -35,11 +35,28 @@ def valid_session_token() -> str:
     """Generates a valid signed JWT session token for EPS Sura."""
     token = default_jwt_handler.create_session_token({
         "sub": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+        "client_id": "sigires",
+        "client_name": "SIGIRES",
         "tenant_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
         "tenant_name": "EPS Sura - Regional Nor-Occidente",
         "eps_id": "eps_sura_01",
         "ips_code": "631300040301",
         "origin": "https://sigires.procex.co",
+    })
+    return token
+
+
+@pytest.fixture
+def generic_session_token() -> str:
+    """Generates a valid signed JWT session token for a generic multi-client tenant (otra_empresa)."""
+    token = default_jwt_handler.create_session_token({
+        "sub": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
+        "client_id": "otra_empresa",
+        "client_name": "Entidad Corporativa Externa",
+        "tenant_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
+        "tenant_name": "División Operativa Central",
+        "metadata": {"canal": "portal_web"},
+        "origin": "https://portal.otraempresa.com",
     })
     return token
 

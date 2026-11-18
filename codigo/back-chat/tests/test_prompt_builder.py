@@ -19,8 +19,9 @@ def test_build_system_prompt_for_doctor_and_nurse():
     )
     prompt_doc = PromptBuilder.build_system_prompt(doctor, client_id="sigires", client_name="SIGIRES")
     assert "Estimado Dr. dr.carlos" in prompt_doc
-    assert "formularios" in prompt_doc.lower()
-    assert "reglamentos" in prompt_doc.lower()
+    assert "asistente virtual" in prompt_doc.lower()
+    assert "documentación" in prompt_doc.lower()
+    assert "rag" in prompt_doc.lower()
     # Specific regulations must come from RAG search, not be hardcoded in the system prompt
     assert "118 variables" not in prompt_doc
     assert "Juan Camilo Avendaño" in prompt_doc
@@ -105,3 +106,18 @@ def test_build_user_prompt_injects_search_documents_and_context():
     assert "Fila / Registro Afectado: 45" in prompt
     assert "Reglamento Técnico de Formularios" in prompt
     assert "Regla recuperada dinámicamente desde el servicio de búsqueda" in prompt
+
+
+def test_build_prompts_minimal_without_optional_context():
+    sys_prompt = PromptBuilder.build_system_prompt()
+    usr_prompt = PromptBuilder.build_user_prompt(query="¿Cómo se aprueba una orden de compra?")
+
+    for forbidden in ("EPS", "IPS", "SIGIRES", "Código de Error"):
+        assert forbidden not in sys_prompt
+        assert forbidden not in usr_prompt
+
+    assert "CONSULTA DEL USUARIO:" in usr_prompt
+    assert "CONTEXTO DEL USUARIO:" not in usr_prompt
+    assert "CONTEXTO DE LA APLICACIÓN:" not in usr_prompt
+    assert "METADATOS TÉCNICOS EXTRAÍDOS DEL LOG:" not in usr_prompt
+    assert "TRAZAS O LOGS ADJUNTOS:" not in usr_prompt

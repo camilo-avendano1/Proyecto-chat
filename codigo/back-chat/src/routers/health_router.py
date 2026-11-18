@@ -41,7 +41,9 @@ async def health_check() -> Dict[str, str]:
 )
 async def system_status() -> StatusResponse:
     # Check default Back - Busqueda connectivity
-    default_busqueda_url = settings.CLIENT_BUSQUEDA_URLS.get("sigires", "http://localhost:8001")
+    default_busqueda_url = settings.CLIENT_BUSQUEDA_URLS.get(
+        "default", settings.BACK_BUSQUEDA_URL
+    ).rstrip("/")
     busqueda_status = "unreachable (using local fallback)"
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:

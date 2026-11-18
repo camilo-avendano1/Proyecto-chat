@@ -1,15 +1,48 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
-import ContextSidebar, { TENANT_PRESETS, SCENARIO_PRESETS } from './components/ContextSidebar';
+import ContextSidebar, { TENANT_PRESETS } from './components/ContextSidebar';
 import ChatWindow from './components/ChatWindow';
 import TelemetryDrawer from './components/TelemetryDrawer';
 import ObservabilityModal from './components/ObservabilityModal';
-import { 
-  fetchSystemStatus, 
-  createSession, 
-  streamDiagnostic, 
-  queryDiagnostic 
+import {
+  fetchSystemStatus,
+  createSession,
+  streamChat,
+  queryChat,
 } from './services/api';
+
+const DEFAULT_UI_CONTEXT = {
+  url: 'https://portal.empresa.com/operaciones',
+  view: 'PORTAL_OPERATIVO',
+  module: 'OPERACIONES',
+  status: '',
+  file_format: '',
+  active_button_id: '',
+  field_in_focus: '',
+};
+
+const DEFAULT_USER_CONTEXT = {
+  id: 'ana.martinez',
+  organization: 'División Operativa Central',
+  unit_code: 'CORP-01',
+  role: 'ANALISTA_OPERACIONES',
+};
+
+function pruneEmpty(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  const cleaned = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) continue;
+      cleaned[key] = trimmed;
+    } else {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
 
 export default function App() {
   // System & Health
@@ -18,32 +51,18 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('chat');
   const [showTelemetry, setShowTelemetry] = useState(true);
 
-  // Tenant & Session
-  const [tenantKey, setTenantKey] = useState('sura');
+  // Tenant & Session (Generic client by default)
+  const [tenantKey, setTenantKey] = useState('otra_empresa');
   const [sessionData, setSessionData] = useState(null);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
 
-  // Clinical & UI Context
-  const [uiContext, setUiContext] = useState({
-    url: 'https://plataforma.salud.co/formularios/validacion',
-    pagina_actual: 'REGISTRO_FORMULARIOS',
-    modulo: 'FORMULARIOS_CLINICOS',
-    active_button_id: 'btn_validar_formulario',
-    field_in_focus: 'campo_signos_vitales',
-    estado_cargue_actual: 'CON_ERRORES',
-    formato_archivo: 'FORMULARIO_CLINICO_CSV',
-  });
-
-  const [userContext, setUserContext] = useState({
-    usuario: 'dr.juan.perez',
-    filial: 'EPS Sura - Regional Nor-Occidente',
-    eps: 'EPS_SURA',
-    ips_code: '631300040301',
-    ips_nombre: 'Clínica Las Américas',
-    permisos: 'PERFIL_IPS_MEDICO',
-  });
-
+  // Request Mode & Optional Enriched Context
+  const [minimalMode, setMinimalMode] = useState(true);
+  const [uiContext, setUiContext] = useState(DEFAULT_UI_CONTEXT);
+  const [userContext, setUserContext] = useState(DEFAULT_USER_CONTEXT);
   const [systemLogs, setSystemLogs] = useState('');
+  const [extrasText, setExtrasText] = useState('');
+  const [extrasError, setExtrasError] = useState('');
 
   // Chat State
   const [messages, setMessages] = useState([]);
@@ -81,11 +100,12 @@ export default function App() {
     setIsSessionLoading(true);
     try {
       const session = await createSession({
-        clientId: preset.client_id,
         origin: window.location.origin,
+        apiKey: preset.api_key,
+        clientId: preset.client_id,
+        metadata: preset.metadata,
         epsId: preset.eps_id,
         ipsCode: preset.ips_code,
-        apiKey: preset.api_key,
       });
       setSessionData(session);
     } catch (err) {
@@ -96,34 +116,67 @@ export default function App() {
     }
   }, [tenantKey]);
 
-  // Initial Load
+  // Initial status check & polling
   useEffect(() => {
     checkStatus();
-    initSession();
     const interval = setInterval(checkStatus, 15000);
     return () => clearInterval(interval);
-  }, [checkStatus, initSession]);
+  }, [checkStatus]);
+
+  // Initialize session whenever tenant changes
+  useEffect(() => {
+    initSession();
+  }, [initSession]);
 
   // Scenario Selector
   const handleSelectScenario = (scenario) => {
     setActiveScenarioId(scenario.id);
     setQueryInput(scenario.query);
-    setSystemLogs(scenario.system_logs);
-    setUiContext((prev) => ({
-      ...prev,
-      pagina_actual: scenario.pagina_actual,
-      modulo: scenario.modulo,
-      formato_archivo: scenario.formato_archivo,
-      estado_cargue_actual: scenario.estado_cargue_actual,
-      active_button_id: scenario.active_button_id,
-      field_in_focus: scenario.field_in_focus,
-    }));
+    setMinimalMode(Boolean(scenario.minimalMode));
+    setSystemLogs(scenario.system_logs || '');
+    setExtrasText(scenario.extras_json || '');
+    setExtrasError('');
+
+    if (scenario.target_tenant && tenantKey !== scenario.target_tenant) {
+      setTenantKey(scenario.target_tenant);
+    } else if (
+      scenario.target_tenant_group === 'sigires' &&
+      !['sura', 'sanitas', 'nuevaeps'].includes(tenantKey)
+    ) {
+      setTenantKey('sura');
+    }
+
+    if (scenario.context) {
+      setUiContext(scenario.context);
+    }
+    if (scenario.user) {
+      setUserContext(scenario.user);
+    }
   };
 
   // Send Message Handler
   const handleSendMessage = async (textToSend) => {
-    const text = textToSend || queryInput;
-    if (!text.trim() || isStreaming) return;
+    const text = (textToSend ?? queryInput).trim();
+    if (!text || isStreaming) return;
+
+    // Validate extras JSON before sending if enriched mode is active
+    let parsedExtras = null;
+    if (!minimalMode && extrasText && extrasText.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(extrasText);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setExtrasError('Extras debe ser un objeto JSON válido (ej. {"clave": "valor"}).');
+          return;
+        }
+        if (Object.keys(parsed).length > 0) {
+          parsedExtras = parsed;
+        }
+        setExtrasError('');
+      } catch {
+        setExtrasError('JSON inválido en Extras para Búsqueda.');
+        return;
+      }
+    }
 
     // Check session
     let token = sessionData?.session_token;
@@ -131,15 +184,16 @@ export default function App() {
       try {
         const preset = TENANT_PRESETS[tenantKey];
         const newSession = await createSession({
-          clientId: preset.client_id,
           origin: window.location.origin,
+          apiKey: preset.api_key,
+          clientId: preset.client_id,
+          metadata: preset.metadata,
           epsId: preset.eps_id,
           ipsCode: preset.ips_code,
-          apiKey: preset.api_key,
         });
         setSessionData(newSession);
         token = newSession.session_token;
-      } catch (e) {
+      } catch {
         alert('No se pudo establecer la sesión con el backend. Verifica que el puerto 8000 esté activo.');
         return;
       }
@@ -154,23 +208,42 @@ export default function App() {
       timestamp,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
-    setQueryInput('');
-
-    // Prepare History for Back Central
     const historyPayload = messages.map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
-    // Build Payload
+    setMessages((prev) => [...prev, userMsg]);
+    setQueryInput('');
+
+    // 2. Build clean generic payload
     const requestPayload = {
       query: text,
-      system_logs: systemLogs && systemLogs.trim().length > 0 ? systemLogs : null,
-      ui_context: uiContext,
-      user_context: userContext,
-      conversation_history: historyPayload,
     };
+
+    if (historyPayload.length > 0) {
+      requestPayload.conversation_history = historyPayload;
+    }
+
+    if (!minimalMode) {
+      const cleanUser = pruneEmpty(userContext);
+      if (Object.keys(cleanUser).length > 0) {
+        requestPayload.user = cleanUser;
+      }
+
+      const cleanContext = pruneEmpty(uiContext);
+      if (Object.keys(cleanContext).length > 0) {
+        requestPayload.context = cleanContext;
+      }
+
+      if (systemLogs && systemLogs.trim().length > 0) {
+        requestPayload.logs = systemLogs.trim();
+      }
+
+      if (parsedExtras) {
+        requestPayload.extras = parsedExtras;
+      }
+    }
 
     setIsStreaming(true);
     setActiveDiagnostic(null);
@@ -184,7 +257,7 @@ export default function App() {
 
       setStreamingMessage({ role: 'assistant', content: '' });
 
-      await streamDiagnostic({
+      await streamChat({
         token,
         payload: requestPayload,
         onChunk: (chunk) => {
@@ -206,7 +279,7 @@ export default function App() {
             setActiveSources(sources);
           }
         },
-        onDone: (doneData) => {
+        onDone: () => {
           setMessages((prev) => [
             ...prev,
             {
@@ -238,16 +311,20 @@ export default function App() {
             {
               event,
               data,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              timestamp: new Date().toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              }),
             },
-            ...prev.slice(0, 49), // Keep latest 50 events
+            ...prev.slice(0, 49),
           ]);
         },
       });
     } else {
       // Synchronous Query
       try {
-        const resp = await queryDiagnostic({
+        const resp = await queryChat({
           token,
           payload: requestPayload,
         });
@@ -307,6 +384,8 @@ export default function App() {
         <ContextSidebar
           tenantKey={tenantKey}
           setTenantKey={setTenantKey}
+          minimalMode={minimalMode}
+          setMinimalMode={setMinimalMode}
           sessionData={sessionData}
           onInitSession={initSession}
           isSessionLoading={isSessionLoading}
@@ -316,6 +395,10 @@ export default function App() {
           setUserContext={setUserContext}
           systemLogs={systemLogs}
           setSystemLogs={setSystemLogs}
+          extrasText={extrasText}
+          setExtrasText={setExtrasText}
+          extrasError={extrasError}
+          setExtrasError={setExtrasError}
           onSelectScenario={handleSelectScenario}
           activeScenarioId={activeScenarioId}
         />

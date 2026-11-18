@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Script de Inicio de Microservicios SaaS Core Chat & Diagnóstico
 # Desarrollado por: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno
 # ==============================================================================
@@ -36,7 +36,7 @@ Write-Host "  * LLM Gateway:    http://localhost:8003/docs" -ForegroundColor Whi
 Write-Host "  * Back Chat:      http://localhost:8000/docs" -ForegroundColor White
 Write-Host "  * Front Mock:     http://localhost:5173" -ForegroundColor White
 Write-Host ""
-Write-Host "Credenciales de Administradores Sembradas:" -ForegroundColor Magenta
-Write-Host "  * SUPERADMIN:   superadmin    / AdminSuperSecret2025!  (Global)" -ForegroundColor White
-Write-Host "  * CLIENT_ADMIN: sigires_admin / AdminSigires2025!      (Empresa: SIGIRES)" -ForegroundColor White
+Write-Host "Credenciales de Administrador Inicial (auth-service):" -ForegroundColor Magenta
+Write-Host "  * SUPERADMIN:   superadmin / (valor de BOOTSTRAP_ADMIN_PASSWORD en auth-service/.env; AdminPassword2026! en .env.example)" -ForegroundColor White
+Write-Host "  * CLIENT_ADMIN: crear bajo demanda via POST /api/v1/admin/users" -ForegroundColor White
 Write-Host "================================================================" -ForegroundColor Cyan

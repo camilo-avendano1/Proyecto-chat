@@ -16,6 +16,19 @@ def test_usage_summary(client: TestClient, superadmin_headers: dict):
     assert data["total_records"] >= 3
 
 
+def test_usage_summary_alias_endpoint(client: TestClient, superadmin_headers: dict):
+    res = client.get("/api/v1/usage/summary", headers=superadmin_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "total_records" in data
+    assert "total_tokens_input" in data
+    assert "total_tokens_output" in data
+    assert "total_tokens" in data
+    assert "total_cost_usd" in data
+    assert "saved_fast_path_calls" in data
+    assert data["total_records"] >= 3
+
+
 def test_usage_by_user(client: TestClient, superadmin_headers: dict):
     res = client.get("/api/v1/usage/by-user", headers=superadmin_headers)
     assert res.status_code == 200

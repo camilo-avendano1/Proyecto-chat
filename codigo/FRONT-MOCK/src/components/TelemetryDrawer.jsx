@@ -35,7 +35,7 @@ export default function TelemetryDrawer({
 
       <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
         <p style={{ fontSize: '0.74rem', color: 'var(--text-dim)', marginBottom: '12px' }}>
-          Eventos Server-Sent Events recibidos en tiempo real desde <code>POST /api/v1/diagnostic/stream</code>:
+          Eventos Server-Sent Events recibidos en tiempo real desde <code>POST /api/v1/chat/stream</code>:
         </p>
 
         {events.length === 0 ? (

@@ -1,19 +1,33 @@
 import React, { useState } from 'react';
-import { 
-  Key, 
-  Settings, 
-  Layers, 
-  UserCheck, 
-  FileText, 
-  Sparkles, 
-  CheckCircle2, 
-  AlertCircle, 
+import {
+  Key,
+  Settings,
+  Layers,
+  UserCheck,
+  FileText,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
   RefreshCw,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Sliders,
+  Braces
 } from 'lucide-react';
 
 export const TENANT_PRESETS = {
+  otra_empresa: {
+    client_id: 'otra_empresa',
+    client_name: 'Empresa Corporativa (Genérica)',
+    api_key: 'pk_live_otraempresa_1a2b3c4d5e6f7a8b',
+    organization: 'División Operativa Central',
+    unit_code: 'CORP-01',
+    default_user: 'ana.martinez',
+    default_role: 'ANALISTA_OPERACIONES',
+    default_url: 'https://portal.empresa.com/operaciones',
+    default_view: 'PORTAL_OPERATIVO',
+    default_module: 'OPERACIONES',
+  },
   sura: {
     client_id: 'sigires',
     client_name: 'SIGIRES (Procex Software S.A.S)',
@@ -23,6 +37,13 @@ export const TENANT_PRESETS = {
     ips_code: '631300040301',
     ips_nombre: 'Clínica Las Américas',
     eps_code: 'EPS_SURA',
+    organization: 'EPS_SURA',
+    unit_code: '631300040301',
+    default_user: 'dr.juan.perez',
+    default_role: 'PERFIL_IPS_MEDICO',
+    default_url: 'https://sigires.procex.co/formularios/validacion',
+    default_view: 'REGISTRO_FORMULARIOS',
+    default_module: 'FORMULARIOS_CLINICOS',
   },
   sanitas: {
     client_id: 'sigires',
@@ -33,6 +54,13 @@ export const TENANT_PRESETS = {
     ips_code: '110010999901',
     ips_nombre: 'Clínica Reina Sofía',
     eps_code: 'EPS_SANITAS',
+    organization: 'EPS_SANITAS',
+    unit_code: '110010999901',
+    default_user: 'dr.juan.perez',
+    default_role: 'PERFIL_IPS_MEDICO',
+    default_url: 'https://sigires.procex.co/formularios/validacion',
+    default_view: 'REGISTRO_FORMULARIOS',
+    default_module: 'FORMULARIOS_CLINICOS',
   },
   nuevaeps: {
     client_id: 'sigires',
@@ -43,97 +71,134 @@ export const TENANT_PRESETS = {
     ips_code: '050010001201',
     ips_nombre: 'Hospital Universitario San Vicente',
     eps_code: 'EPS_NUEVA',
-  },
-  otra_empresa: {
-    client_id: 'otra_empresa',
-    client_name: 'Entidad Corporativa Externa',
-    eps_id: 'corp_div_01',
-    eps_nombre: 'División Operativa Central',
-    api_key: 'pk_live_otraempresa_1a2b3c4d5e6f7a8b',
-    ips_code: 'CORP99999999',
-    ips_nombre: 'Sede Central Corporativa',
-    eps_code: 'CORP_EXT',
+    organization: 'EPS_NUEVA',
+    unit_code: '050010001201',
+    default_user: 'dr.juan.perez',
+    default_role: 'PERFIL_IPS_MEDICO',
+    default_url: 'https://sigires.procex.co/formularios/validacion',
+    default_view: 'REGISTRO_FORMULARIOS',
+    default_module: 'FORMULARIOS_CLINICOS',
   },
 };
 
 export const SCENARIO_PRESETS = [
   {
-    id: 'form_enfermeria',
-    name: 'Enfermería: Signos Vitales (CSV)',
+    id: 'consulta_minima',
+    name: 'Genérico: Consulta Mínima (Solo Query)',
+    minimalMode: true,
+    query: '¿Cómo se aprueba una orden de compra?',
+    system_logs: '',
+    extras_json: '',
+  },
+  {
+    id: 'corporativo_contexto',
+    name: 'Corporativo: Con Contexto y Extras',
+    minimalMode: false,
+    target_tenant: 'otra_empresa',
+    query: '¿Cuál es el límite de aprobación para compras de tecnología?',
+    system_logs: '',
+    extras_json: JSON.stringify(
+      { departamento: 'compras', nivel_aprobacion: 'gerencia', moneda: 'COP' },
+      null,
+      2
+    ),
+    context: {
+      url: 'https://portal.empresa.com/compras/ordenes',
+      view: 'APROBACION_ORDENES',
+      module: 'COMPRAS',
+      status: 'EN_REVISION',
+      file_format: 'ORDEN_COMPRA_WEB',
+      active_button_id: 'btn_aprobar_orden',
+      field_in_focus: 'monto_total',
+    },
+    user: {
+      id: 'ana.martinez',
+      organization: 'División Operativa Central',
+      unit_code: 'CORP-01',
+      role: 'ANALISTA_COMPRAS',
+    },
+  },
+  {
+    id: 'sigires_enfermeria',
+    name: 'Cliente SIGIRES: Formulario + Log',
+    minimalMode: false,
+    target_tenant_group: 'sigires',
     query: 'Al subir el formulario de enfermería me rechaza el registro de signos vitales',
-    system_logs: "Fila: 18 | Campo: 6 | Variable 'Presion_Arterial' fuera de formato esperado. Error CE_CAMPO_006_FMT",
-    formato_archivo: 'FORMULARIO_CLINICO_CSV',
-    pagina_actual: 'REGISTRO_ENFERMERIA',
-    modulo: 'FORMULARIOS_CLINICOS',
-    estado_cargue_actual: 'CON_ERRORES',
-    active_button_id: 'btn_validar_formulario',
-    field_in_focus: 'campo_presion_arterial',
+    system_logs:
+      "Fila: 18 | Campo: 6 | Variable 'Presion_Arterial' fuera de formato esperado. Error CE_CAMPO_006_FMT",
+    extras_json: JSON.stringify(
+      { formato: 'FORMULARIO_CLINICO_CSV', proceso: 'enfermeria' },
+      null,
+      2
+    ),
+    context: {
+      url: 'https://sigires.procex.co/formularios/enfermeria',
+      view: 'REGISTRO_ENFERMERIA',
+      module: 'FORMULARIOS_CLINICOS',
+      status: 'CON_ERRORES',
+      file_format: 'FORMULARIO_CLINICO_CSV',
+      active_button_id: 'btn_validar_formulario',
+      field_in_focus: 'campo_presion_arterial',
+    },
+    user: {
+      id: 'enf.laura.gomez',
+      organization: 'EPS_SURA',
+      unit_code: '631300040301',
+      role: 'PERFIL_IPS_ENFERMERO',
+    },
   },
   {
-    id: 'formato_fecha',
-    name: 'Médico: Fecha en Reporte (XML)',
-    query: 'El sistema me rechaza la fecha de atención al validar el formulario médico',
-    system_logs: "Fila: 45 | Campo: 9 | Variable 'Fecha_Atencion' posterior al corte permitido. Error CA_VAR_009_DATE",
-    formato_archivo: 'REPORTE_MEDICO_XML',
-    pagina_actual: 'VALIDACION_REPORTES',
-    modulo: 'CARGA_ARCHIVOS',
-    estado_cargue_actual: 'RECHAZADO',
-    active_button_id: 'btn_procesar_archivo',
-    field_in_focus: 'campo_009_fecha',
-  },
-  {
-    id: 'coherencia_campo',
-    name: 'Coherencia entre Campos (TXT/ZIP)',
-    query: '¿Por qué me aparece rechazo por incoherencia entre sexo y condición de la usuaria?',
-    system_logs: "Fila: 12 | Columna: 14 | Variable 'Condicion_Usuaria' incompatible con sexo reportado. Error CE_VAR_014_INVAL",
-    formato_archivo: 'ANEXO_TECNICO_ZIP',
-    pagina_actual: 'CARGA_ARCHIVOS_NORMATIVOS',
-    modulo: 'CARGA_ARCHIVOS',
-    estado_cargue_actual: 'CON_ERRORES',
-    active_button_id: 'btn_validar_archivo',
-    field_in_focus: 'campo_014_condicion',
-  },
-  {
-    id: 'rips',
-    name: 'Soporte RIPS / Facturación (JSON)',
-    query: '¿Cómo subsano el error de coherencia entre prestación y diagnóstico en el archivo RIPS?',
-    system_logs: 'Fila: 88 | Campo: 15 | Error RIPS_CT_INVAL: Inconsistencia entre código de prestación y CIE-10',
-    formato_archivo: 'RIPS_SOPORTE_JSON',
-    pagina_actual: 'FACTURACION_RIPS',
-    modulo: 'INFORMES',
-    estado_cargue_actual: 'CON_ERRORES',
-    active_button_id: 'btn_generar_rips',
-    field_in_focus: 'rips_codigo_consulta',
+    id: 'sigires_delimitador',
+    name: 'Cliente SIGIRES: Error Formato Fase 1',
+    minimalMode: false,
+    target_tenant_group: 'sigires',
+    query: 'El validador rechaza el archivo plano en Fase 1 por delimitador y columnas',
+    system_logs:
+      'FASE 1 (CA) - Error CA_FILE_001_DELIM: Fila 3 tiene 19 columnas delimitadas por pipe (|) y la estructura exige 22.',
+    extras_json: JSON.stringify(
+      { fase: 'FASE_1_CA', formato: 'ANEXO_TECNICO_TXT' },
+      null,
+      2
+    ),
+    context: {
+      url: 'https://sigires.procex.co/carga-archivos/validador',
+      view: 'CARGA_ARCHIVOS_NORMATIVOS',
+      module: 'CARGA_ARCHIVOS',
+      status: 'RECHAZADO',
+      file_format: 'ANEXO_TECNICO_TXT',
+      active_button_id: 'btn_validar_archivo',
+      field_in_focus: 'archivo_plano_txt',
+    },
+    user: {
+      id: 'rad.carlos.mendez',
+      organization: 'EPS_SURA',
+      unit_code: '631300040301',
+      role: 'PERFIL_IPS_RADICADOR',
+    },
   },
   {
     id: 'saludo',
-    name: 'Saludo Rápido (Fast-Path)',
+    name: 'Saludo Rápido (Fast-Path 0 Tokens)',
+    minimalMode: true,
     query: '¡Hola! Buenos días, ¿en qué me puedes ayudar hoy?',
     system_logs: '',
-    formato_archivo: 'FORMULARIO_CLINICO_CSV',
-    pagina_actual: 'DASHBOARD_PRINCIPAL',
-    modulo: 'INICIO',
-    estado_cargue_actual: 'NO_APLICA',
-    active_button_id: null,
-    field_in_focus: null,
+    extras_json: '',
   },
   {
     id: 'guardrail',
     name: 'Guardrail: Fuera de Dominio',
+    minimalMode: true,
     query: '¿Cuál es la mejor receta para preparar un pastel de chocolate?',
     system_logs: '',
-    formato_archivo: 'NO_APLICA',
-    pagina_actual: 'GENERAL',
-    modulo: 'GENERAL',
-    estado_cargue_actual: 'NO_APLICA',
-    active_button_id: null,
-    field_in_focus: null,
-  }
+    extras_json: '',
+  },
 ];
 
 export default function ContextSidebar({
   tenantKey,
   setTenantKey,
+  minimalMode,
+  setMinimalMode,
   sessionData,
   onInitSession,
   isSessionLoading,
@@ -143,22 +208,32 @@ export default function ContextSidebar({
   setUserContext,
   systemLogs,
   setSystemLogs,
+  extrasText,
+  setExtrasText,
+  extrasError,
+  setExtrasError,
   onSelectScenario,
   activeScenarioId,
 }) {
   const [showAdvancedUi, setShowAdvancedUi] = useState(false);
   const [showAdvancedUser, setShowAdvancedUser] = useState(false);
+  const [showExtras, setShowExtras] = useState(true);
 
   const handleTenantChange = (key) => {
     setTenantKey(key);
     const preset = TENANT_PRESETS[key];
     if (preset) {
-      setUserContext((prev) => ({
+      setUserContext({
+        id: preset.default_user,
+        organization: preset.organization,
+        unit_code: preset.unit_code,
+        role: preset.default_role,
+      });
+      setUiContext((prev) => ({
         ...prev,
-        eps: preset.eps_code,
-        ips_code: preset.ips_code,
-        ips_nombre: preset.ips_nombre,
-        filial: preset.eps_nombre,
+        url: preset.default_url,
+        view: preset.default_view,
+        module: preset.default_module,
       }));
     }
   };
@@ -182,15 +257,15 @@ export default function ContextSidebar({
 
         <div className="form-group">
           <label className="form-label">Entidad / Cliente Solicitante</label>
-          <select 
+          <select
             className="form-select"
             value={tenantKey}
             onChange={(e) => handleTenantChange(e.target.value)}
           >
+            <option value="otra_empresa">otra_empresa - Empresa Corporativa (Genérica)</option>
             <option value="sura">SIGIRES - EPS Sura (Regional Nor-Occidente)</option>
             <option value="sanitas">SIGIRES - EPS Sanitas (IPS San Rafael)</option>
             <option value="nuevaeps">SIGIRES - Nueva EPS (Consorcio Salud)</option>
-            <option value="otra_empresa">Otra Empresa (Entidad Corporativa Externa)</option>
           </select>
         </div>
 
@@ -216,6 +291,17 @@ export default function ContextSidebar({
           {sessionData && (
             <>
               <div className="session-row">
+                <span className="session-key">Cliente:</span>
+                <span
+                  className="session-val"
+                  title={`${sessionData.client_name || ''} (${sessionData.client_id || ''})`}
+                >
+                  {sessionData.client_name
+                    ? `${sessionData.client_name} (${sessionData.client_id})`
+                    : sessionData.client_id}
+                </span>
+              </div>
+              <div className="session-row">
                 <span className="session-key">Tenant Name:</span>
                 <span className="session-val" title={sessionData.tenant_name}>
                   {sessionData.tenant_name}
@@ -230,8 +316,8 @@ export default function ContextSidebar({
             </>
           )}
 
-          <button 
-            className="btn-primary" 
+          <button
+            className="btn-primary"
             style={{ width: '100%', marginTop: '10px', padding: '7px 12px' }}
             onClick={onInitSession}
             disabled={isSessionLoading}
@@ -242,14 +328,14 @@ export default function ContextSidebar({
         </div>
       </div>
 
-      {/* 3. Escenarios de Prueba Clínicos Preconfigurados */}
+      {/* 3. Escenarios Preconfigurados */}
       <div className="panel-section">
         <div className="section-label">
           <span>Escenarios Preconfigurados</span>
           <Sparkles size={13} style={{ color: '#10b981' }} />
         </div>
         <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-          Carga en 1 clic escenarios de diferentes formularios, formatos y perfiles (Médicos, Enfermeros, Radicadores):
+          Carga en 1 clic escenarios mínimos genéricos, corporativos enriquecidos o de clientes específicos (ej. SIGIRES):
         </p>
         <div className="preset-chips">
           {SCENARIO_PRESETS.map((scenario) => (
@@ -264,14 +350,50 @@ export default function ContextSidebar({
         </div>
       </div>
 
-      {/* 4. System Logs Input */}
+      {/* 4. Minimal Mode Toggle */}
       <div className="panel-section">
+        <div className="section-label" style={{ marginBottom: '8px' }}>
+          <span>Payload de Petición</span>
+          <Sliders size={13} />
+        </div>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            padding: '8px 10px',
+            borderRadius: '8px',
+            background: minimalMode ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+            border: minimalMode ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid var(--border-subtle)',
+            cursor: 'pointer',
+            fontSize: '0.78rem',
+            color: 'var(--text-main)',
+          }}
+        >
+          <span>Modo Petición Mínima (solo query)</span>
+          <input
+            type="checkbox"
+            checked={minimalMode}
+            onChange={(e) => setMinimalMode(e.target.checked)}
+            style={{ accentColor: '#10b981', width: '16px', height: '16px', cursor: 'pointer' }}
+          />
+        </label>
+        <p style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '6px', lineHeight: '1.35' }}>
+          {minimalMode
+            ? 'Activo: envía únicamente {"query"} (y conversation_history si existe).'
+            : 'Enriquecido: adjunta user, context, logs y extras no vacíos junto con query.'}
+        </p>
+      </div>
+
+      {/* 5. System Logs Input */}
+      <div className="panel-section" style={{ opacity: minimalMode ? 0.55 : 1 }}>
         <div className="section-label">
-          <span>Trazas / Logs del Sistema</span>
+          <span>Trazas / Logs (logs)</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             {systemLogs && (
-              <button 
-                className="chip-btn" 
+              <button
+                className="chip-btn"
                 style={{ fontSize: '0.68rem', padding: '1px 6px' }}
                 onClick={() => setSystemLogs('')}
                 title="Limpiar trazas"
@@ -284,27 +406,27 @@ export default function ContextSidebar({
         </div>
         <div className="form-group">
           <label className="form-label">
-            Logs de Error descargados (El Back los clasificará en CA/CE/CD):
+            Trazas de error opcionales (si se adjuntan, el backend extrae código y fase):
           </label>
           <textarea
             className="form-textarea"
-            placeholder="Fila: 12 | Columna: 14 | Error CE_VAR_014_INVAL..."
+            placeholder="Ej: Fila: 18 | Campo: 6 | Error CE_CAMPO_006_FMT..."
             value={systemLogs}
             onChange={(e) => setSystemLogs(e.target.value)}
           />
         </div>
       </div>
 
-      {/* 5. UI Context Simulator */}
-      <div className="panel-section">
-        <div 
-          className="section-label" 
+      {/* 6. UI / Screen Context Simulator */}
+      <div className="panel-section" style={{ opacity: minimalMode ? 0.55 : 1 }}>
+        <div
+          className="section-label"
           style={{ cursor: 'pointer', marginBottom: showAdvancedUi ? '12px' : '0' }}
           onClick={() => setShowAdvancedUi(!showAdvancedUi)}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Layers size={13} />
-            Contexto de UI (Pantalla Activa)
+            Contexto de Pantalla (context)
           </span>
           {showAdvancedUi ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </div>
@@ -312,23 +434,23 @@ export default function ContextSidebar({
         {showAdvancedUi && (
           <div style={{ marginTop: '8px' }}>
             <div className="form-group">
-              <label className="form-label">URL Activa en SIGIRES</label>
+              <label className="form-label">URL / Vista Activa</label>
               <input
                 type="text"
                 className="form-input"
-                value={uiContext.url}
+                value={uiContext.url || ''}
                 onChange={(e) => setUiContext({ ...uiContext, url: e.target.value })}
               />
             </div>
 
             <div className="grid-2col">
               <div className="form-group">
-                <label className="form-label">Página Actual</label>
+                <label className="form-label">Vista / Página</label>
                 <input
                   type="text"
                   className="form-input"
-                  value={uiContext.pagina_actual}
-                  onChange={(e) => setUiContext({ ...uiContext, pagina_actual: e.target.value })}
+                  value={uiContext.view || ''}
+                  onChange={(e) => setUiContext({ ...uiContext, view: e.target.value })}
                 />
               </div>
               <div className="form-group">
@@ -336,49 +458,58 @@ export default function ContextSidebar({
                 <input
                   type="text"
                   className="form-input"
-                  value={uiContext.modulo}
-                  onChange={(e) => setUiContext({ ...uiContext, modulo: e.target.value })}
+                  value={uiContext.module || ''}
+                  onChange={(e) => setUiContext({ ...uiContext, module: e.target.value })}
                 />
               </div>
             </div>
 
             <div className="grid-2col">
               <div className="form-group">
-                <label className="form-label">Estado Cargue</label>
-                <select
-                  className="form-select"
-                  value={uiContext.estado_cargue_actual}
-                  onChange={(e) => setUiContext({ ...uiContext, estado_cargue_actual: e.target.value })}
-                >
-                  <option value="CON_ERRORES">CON_ERRORES</option>
-                  <option value="RECHAZADO">RECHAZADO</option>
-                  <option value="EXITOSO">EXITOSO</option>
-                  <option value="NO_APLICA">NO_APLICA</option>
-                </select>
+                <label className="form-label">Estado</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  list="status-suggestions"
+                  placeholder="Opcional"
+                  value={uiContext.status || ''}
+                  onChange={(e) => setUiContext({ ...uiContext, status: e.target.value })}
+                />
+                <datalist id="status-suggestions">
+                  <option value="EN_REVISION" />
+                  <option value="CON_ERRORES" />
+                  <option value="RECHAZADO" />
+                  <option value="EXITOSO" />
+                </datalist>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Formato Formulario / Archivo</label>
-                <select
-                  className="form-select"
-                  value={uiContext.formato_archivo}
-                  onChange={(e) => setUiContext({ ...uiContext, formato_archivo: e.target.value })}
-                >
-                  <option value="FORMULARIO_CLINICO_CSV">Formulario Clínico / Enfermería (CSV)</option>
-                  <option value="REPORTE_MEDICO_XML">Reporte Médico (XML)</option>
-                  <option value="RIPS_SOPORTE_JSON">Soporte RIPS / Facturación (JSON)</option>
-                  <option value="ANEXO_TECNICO_ZIP">Anexo Técnico Plano (TXT/ZIP)</option>
-                  <option value="NO_APLICA">No aplica</option>
-                </select>
+                <label className="form-label">Formato / Tipo</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  list="format-suggestions"
+                  placeholder="Opcional (CSV, JSON...)"
+                  value={uiContext.file_format || ''}
+                  onChange={(e) => setUiContext({ ...uiContext, file_format: e.target.value })}
+                />
+                <datalist id="format-suggestions">
+                  <option value="ORDEN_COMPRA_WEB" />
+                  <option value="FORMULARIO_CLINICO_CSV" />
+                  <option value="REPORTE_MEDICO_XML" />
+                  <option value="RIPS_SOPORTE_JSON" />
+                  <option value="ANEXO_TECNICO_TXT" />
+                </datalist>
               </div>
             </div>
 
             <div className="grid-2col">
               <div className="form-group">
-                <label className="form-label">Botón Activo</label>
+                <label className="form-label">Acción / Botón Activo</label>
                 <input
                   type="text"
                   className="form-input"
+                  placeholder="Opcional"
                   value={uiContext.active_button_id || ''}
                   onChange={(e) => setUiContext({ ...uiContext, active_button_id: e.target.value })}
                 />
@@ -388,6 +519,7 @@ export default function ContextSidebar({
                 <input
                   type="text"
                   className="form-input"
+                  placeholder="Opcional"
                   value={uiContext.field_in_focus || ''}
                   onChange={(e) => setUiContext({ ...uiContext, field_in_focus: e.target.value })}
                 />
@@ -397,16 +529,16 @@ export default function ContextSidebar({
         )}
       </div>
 
-      {/* 6. User Context Simulator */}
-      <div className="panel-section">
-        <div 
-          className="section-label" 
+      {/* 7. User Context Simulator */}
+      <div className="panel-section" style={{ opacity: minimalMode ? 0.55 : 1 }}>
+        <div
+          className="section-label"
           style={{ cursor: 'pointer', marginBottom: showAdvancedUser ? '12px' : '0' }}
           onClick={() => setShowAdvancedUser(!showAdvancedUser)}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <UserCheck size={13} />
-            Contexto de Usuario & Permisos
+            Contexto de Usuario (user)
           </span>
           {showAdvancedUser ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </div>
@@ -419,55 +551,103 @@ export default function ContextSidebar({
                 <input
                   type="text"
                   className="form-input"
-                  value={userContext.usuario}
-                  onChange={(e) => setUserContext({ ...userContext, usuario: e.target.value })}
+                  value={userContext.id || ''}
+                  onChange={(e) => setUserContext({ ...userContext, id: e.target.value })}
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">EPS</label>
+                <label className="form-label">Organización / División</label>
                 <input
                   type="text"
                   className="form-input"
-                  value={userContext.eps}
-                  onChange={(e) => setUserContext({ ...userContext, eps: e.target.value })}
+                  value={userContext.organization || ''}
+                  onChange={(e) => setUserContext({ ...userContext, organization: e.target.value })}
                 />
               </div>
             </div>
 
             <div className="grid-2col">
               <div className="form-group">
-                <label className="form-label">Código Habilitación IPS</label>
+                <label className="form-label">Código de Sede / Unidad</label>
                 <input
                   type="text"
                   className="form-input"
-                  value={userContext.ips_code}
-                  onChange={(e) => setUserContext({ ...userContext, ips_code: e.target.value })}
+                  value={userContext.unit_code || ''}
+                  onChange={(e) => setUserContext({ ...userContext, unit_code: e.target.value })}
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Nombre IPS</label>
+                <label className="form-label">Rol del Usuario</label>
                 <input
                   type="text"
                   className="form-input"
-                  value={userContext.ips_nombre || ''}
-                  onChange={(e) => setUserContext({ ...userContext, ips_nombre: e.target.value })}
+                  list="role-suggestions"
+                  value={userContext.role || ''}
+                  onChange={(e) => setUserContext({ ...userContext, role: e.target.value })}
                 />
+                <datalist id="role-suggestions">
+                  <option value="ANALISTA_OPERACIONES" />
+                  <option value="ANALISTA_COMPRAS" />
+                  <option value="COLABORADOR" />
+                  <option value="SUPERVISOR" />
+                  <option value="PERFIL_IPS_MEDICO" />
+                  <option value="PERFIL_IPS_ENFERMERO" />
+                  <option value="PERFIL_IPS_RADICADOR" />
+                  <option value="PERFIL_EPS_AUDITOR" />
+                </datalist>
               </div>
             </div>
+          </div>
+        )}
+      </div>
 
-            <div className="form-group">
-              <label className="form-label">Rol / Perfil del Profesional</label>
-              <select
-                className="form-select"
-                value={userContext.permisos}
-                onChange={(e) => setUserContext({ ...userContext, permisos: e.target.value })}
-              >
-                <option value="PERFIL_IPS_MEDICO">PERFIL_IPS_MEDICO (Médico)</option>
-                <option value="PERFIL_IPS_ENFERMERO">PERFIL_IPS_ENFERMERO (Enfermero/a)</option>
-                <option value="PERFIL_IPS_RADICADOR">PERFIL_IPS_RADICADOR (Radicador)</option>
-                <option value="PERFIL_EPS_AUDITOR">PERFIL_EPS_AUDITOR (Auditor)</option>
-              </select>
+      {/* 8. Search Extras JSON Simulator */}
+      <div className="panel-section" style={{ opacity: minimalMode ? 0.55 : 1 }}>
+        <div
+          className="section-label"
+          style={{ cursor: 'pointer', marginBottom: showExtras ? '10px' : '0' }}
+          onClick={() => setShowExtras(!showExtras)}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Braces size={13} />
+            Extras JSON para Búsqueda
+          </span>
+          {showExtras ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </div>
+
+        {showExtras && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label className="form-label" style={{ marginBottom: 0 }}>
+                Metadatos opcionales (snake_case, escalares):
+              </label>
+              {extrasText && (
+                <button
+                  className="chip-btn"
+                  style={{ fontSize: '0.68rem', padding: '1px 6px' }}
+                  onClick={() => {
+                    setExtrasText('');
+                    setExtrasError('');
+                  }}
+                >
+                  Limpiar
+                </button>
+              )}
             </div>
+            <textarea
+              className="form-textarea"
+              placeholder='{"departamento": "compras", "moneda": "COP"}'
+              value={extrasText}
+              onChange={(e) => {
+                setExtrasText(e.target.value);
+                if (extrasError) setExtrasError('');
+              }}
+            />
+            {extrasError && (
+              <p style={{ color: '#f87171', fontSize: '0.72rem', marginTop: '4px' }}>
+                {extrasError}
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -111,6 +111,7 @@ class AuditSecurityLogger:
         content: str,
         ips_code: Optional[str] = None,
         request_id: Optional[str] = None,
+        rol: Optional[str] = None,
     ) -> MessageLogRecord:
         """Audits an incoming user query."""
         record = MessageLogRecord(
@@ -133,6 +134,7 @@ class AuditSecurityLogger:
                 content=content,
                 ips_code=ips_code,
                 request_id=record.request_id,
+                rol=rol,
             )
         except Exception:
             logging.getLogger("audit.message").exception("Failed to persist incoming message to central DB")
@@ -155,6 +157,7 @@ class AuditSecurityLogger:
         status: str = "COMPLETED",
         ips_code: Optional[str] = None,
         request_id: Optional[str] = None,
+        rol: Optional[str] = None,
     ) -> MessageLogRecord:
         """Audits an outgoing response to user."""
         record = MessageLogRecord(
@@ -184,6 +187,7 @@ class AuditSecurityLogger:
                 status=status,
                 ips_code=ips_code,
                 request_id=request_id,
+                rol=rol,
             )
         except Exception:
             logging.getLogger("audit.message").exception("Failed to persist outgoing message to central DB")

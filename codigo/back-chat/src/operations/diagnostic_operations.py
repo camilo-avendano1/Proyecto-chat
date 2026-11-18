@@ -1,15 +1,15 @@
 """
-Diagnostic and Chat orchestration operations.
+Chat and Diagnostic orchestration operations.
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 
 Executes the full pipeline:
 1. PII/PHI Sanitization (Ley 1581 de 2012)
 2. Inbound message audit & Security Guardrails check (Greetings, Injections, Out-of-Domain)
    - Fast-path for greetings & off-topic: 0 LLM tokens, instant response.
-3. Log parsing & Error Diagnostic classification
+3. Optional Log parsing & Error Diagnostic classification (only when error signals exist)
 4. Client-specific Knowledge retrieval via Back - Busqueda
-5. Contextual Clinical Prompt assembly with Hardened System Guardrails
-6. LLM streaming inference (LM Studio / Ollama / OpenAI)
+5. Contextual adaptive Prompt assembly with Hardened System Guardrails
+6. LLM streaming/sync inference (via LLM Gateway / OpenAI-compatible server)
 7. SSE event emission conforming to integration contract
 8. Outbound message audit and token ledger recording per User and Tenant
 """
@@ -17,17 +17,17 @@ Executes the full pipeline:
 import asyncio
 import json
 import time
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 import uuid
 
 from src.domain.entities import ErrorDiagnostic, KnowledgeSource, UsageLedgerRecord
 from src.infrastructure.security.audit_logger import audit_logger
 from src.models.common import ErrorDiagnosticModel, SourceItem
 from src.models.diagnostic import (
-    DiagnosticQueryResponse,
-    DiagnosticStreamRequest,
+    ChatQueryResponse,
+    ChatRequest,
 )
-from src.operations.guardrails import ChatGuardrails
+from src.operations.guardrails import ChatGuardrails, GuardrailResult
 from src.operations.interfaces import (
     LedgerRepositoryProtocol,
     LLMServiceProtocol,
@@ -39,7 +39,7 @@ from src.operations.sanitizer_operations import PIISanitizer
 
 
 class DiagnosticOperations:
-    """Core orchestration service for diagnostic assistance and chat."""
+    """Core orchestration service for multi-client chat and diagnostic assistance."""
 
     def __init__(
         self,
@@ -53,167 +53,163 @@ class DiagnosticOperations:
         self.ledger_repo = ledger_repo
         self.enable_pii_scrubbing = enable_pii_scrubbing
 
-    async def execute_query(
+    def _sanitize_inputs(
         self,
-        request: DiagnosticStreamRequest,
+        raw_query: str,
+        raw_logs: Optional[str],
+        client_id: str,
         tenant_id: str,
-        client_id: str = "sigires",
-        busqueda_api_url: Optional[str] = None,
-        client_name: str = "SIGIRES",
-    ) -> DiagnosticQueryResponse:
-        """Executes a synchronous diagnostic query (non-streaming)."""
-        start_time = time.perf_counter()
-        request_id = str(uuid.uuid4())
-        usuario = request.user_context.usuario or "anonimo"
-        ips_code = request.user_context.ips_code
+        usuario: str,
+        ips_code: Optional[str],
+        request_id: str,
+    ) -> Tuple[str, Optional[str]]:
+        if not self.enable_pii_scrubbing:
+            return raw_query, raw_logs
 
-        # 1. PII Sanitization
-        query = request.query
-        system_logs = request.system_logs
-        if self.enable_pii_scrubbing:
-            sanitized_query = PIISanitizer.sanitize(query) or query
-            sanitized_logs = PIISanitizer.sanitize(system_logs)
-            if sanitized_query != query or sanitized_logs != system_logs:
-                audit_logger.log_security_event(
-                    event_type="PII_MASKED_IN_PAYLOAD",
-                    severity="LOW",
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    details={"field": "query_or_logs", "rule": "Ley 1581 de 2012"},
-                    ips_code=ips_code,
-                    request_id=request_id,
-                )
-            query = sanitized_query
-            system_logs = sanitized_logs
-
-        # 2. Audit inbound message
-        audit_logger.log_message_in(
-            client_id=client_id,
-            tenant_id=tenant_id,
-            usuario=usuario,
-            content=query,
-            ips_code=ips_code,
-            request_id=request_id,
-        )
-
-        # 3. Guardrails Pre-LLM check (Greetings, Prompt Injections, Out-of-Domain)
-        guardrail = ChatGuardrails.evaluate(
-            query=query,
-            system_logs=system_logs,
-            client_name=client_name
-        )
-
-        if guardrail.is_intercepted:
-            latency_ms = int((time.perf_counter() - start_time) * 1000)
-
-            # Security audit logging if blocked or out-of-domain
-            if guardrail.status == "SECURITY_BLOCKED":
-                audit_logger.log_security_event(
-                    event_type="PROMPT_INJECTION_ATTEMPT",
-                    severity="HIGH",
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    details={"query": query, "reason": guardrail.reason},
-                    ips_code=ips_code,
-                    request_id=request_id,
-                )
-            elif guardrail.status == "OUT_OF_DOMAIN":
-                audit_logger.log_security_event(
-                    event_type="OUT_OF_DOMAIN_QUERY",
-                    severity="MEDIUM",
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    details={"query": query},
-                    ips_code=ips_code,
-                    request_id=request_id,
-                )
-
-            # Record in ledger with 0 LLM tokens consumed
-            await self.ledger_repo.record_usage(
-                UsageLedgerRecord(
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    ips_code=ips_code,
-                    operacion=guardrail.status,
-                    tokens_input=0,
-                    tokens_output=0,
-                    costo_usd=0.0,
-                    latencia_ms=latency_ms,
-                    status=guardrail.status,
-                    is_llm_call=False,
-                    request_id=request_id,
-                    query_preview=query[:100],
-                )
-            )
-
-            # Notificar al LLM Gateway de evento no-LLM si está disponible
-            if hasattr(self.llm_service, "record_usage_event"):
-                try:
-                    await self.llm_service.record_usage_event(
-                        client_id=client_id,
-                        tenant_id=tenant_id,
-                        usuario=usuario,
-                        operacion=guardrail.status,
-                        is_llm_call=False,
-                        tokens_input=0,
-                        tokens_output=0,
-                        costo_usd=0.0,
-                        latencia_ms=latency_ms,
-                        rol=request.user_context.permisos or "usuario",
-                        status=guardrail.status,
-                        request_id=request_id,
-                    )
-                except Exception:
-                    pass
-
-            # Audit outbound response
-            audit_logger.log_message_out(
+        sanitized_query = PIISanitizer.sanitize(raw_query) or raw_query
+        sanitized_logs = PIISanitizer.sanitize(raw_logs)
+        if sanitized_query != raw_query or sanitized_logs != raw_logs:
+            audit_logger.log_security_event(
+                event_type="PII_MASKED_IN_PAYLOAD",
+                severity="LOW",
                 client_id=client_id,
                 tenant_id=tenant_id,
                 usuario=usuario,
-                content=guardrail.direct_response or "",
-                tokens=0,
-                costo_usd=0.0,
-                latencia_ms=latency_ms,
-                status=guardrail.status,
+                details={"field": "query_or_logs", "rule": "Ley 1581 de 2012"},
+                ips_code=ips_code,
+                request_id=request_id,
+            )
+        return sanitized_query, sanitized_logs
+
+    async def _record_interception(
+        self,
+        guardrail: GuardrailResult,
+        client_id: str,
+        tenant_id: str,
+        usuario: str,
+        effective_role: str,
+        ips_code: Optional[str],
+        request_id: str,
+        query: str,
+        start_time: float,
+    ) -> None:
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        direct_text = guardrail.direct_response or ""
+
+        if guardrail.status == "SECURITY_BLOCKED":
+            audit_logger.log_security_event(
+                event_type="PROMPT_INJECTION_ATTEMPT",
+                severity="HIGH",
+                client_id=client_id,
+                tenant_id=tenant_id,
+                usuario=usuario,
+                details={"query": query, "reason": guardrail.reason},
+                ips_code=ips_code,
+                request_id=request_id,
+            )
+        elif guardrail.status == "OUT_OF_DOMAIN":
+            audit_logger.log_security_event(
+                event_type="OUT_OF_DOMAIN_QUERY",
+                severity="MEDIUM",
+                client_id=client_id,
+                tenant_id=tenant_id,
+                usuario=usuario,
+                details={"query": query},
                 ips_code=ips_code,
                 request_id=request_id,
             )
 
-            return DiagnosticQueryResponse(
-                response=guardrail.direct_response or "",
-                error_diagnostic=None,
-                sources=[],
+        await self.ledger_repo.record_usage(
+            UsageLedgerRecord(
+                client_id=client_id,
+                tenant_id=tenant_id,
+                usuario=usuario,
+                ips_code=ips_code,
+                operacion=guardrail.status,
+                tokens_input=0,
+                tokens_output=0,
+                costo_usd=0.0,
+                latencia_ms=latency_ms,
+                status=guardrail.status,
+                is_llm_call=False,
+                request_id=request_id,
+                query_preview=query[:100],
             )
+        )
 
-        # 4. Parse log and classify error
+        if hasattr(self.llm_service, "record_usage_event"):
+            try:
+                await self.llm_service.record_usage_event(
+                    client_id=client_id,
+                    tenant_id=tenant_id,
+                    usuario=usuario,
+                    operacion=guardrail.status,
+                    is_llm_call=False,
+                    tokens_input=0,
+                    tokens_output=0,
+                    costo_usd=0.0,
+                    latencia_ms=latency_ms,
+                    rol=effective_role,
+                    status=guardrail.status,
+                    request_id=request_id,
+                )
+            except Exception:
+                pass
+
+        audit_logger.log_message_out(
+            client_id=client_id,
+            tenant_id=tenant_id,
+            usuario=usuario,
+            content=direct_text,
+            tokens=0,
+            costo_usd=0.0,
+            latencia_ms=latency_ms,
+            status=guardrail.status,
+            ips_code=ips_code,
+            request_id=request_id,
+            rol=effective_role,
+        )
+
+    async def _prepare_llm_context(
+        self,
+        request: ChatRequest,
+        query: str,
+        system_logs: Optional[str],
+        client_id: str,
+        client_name: str,
+        tenant_id: str,
+        busqueda_api_url: Optional[str],
+        usuario: str,
+        role: Optional[str],
+        user_attrs: Dict[str, Any],
+        context_dict: Dict[str, Any],
+        formato_archivo: Optional[str],
+    ) -> Tuple[Optional[ErrorDiagnostic], List[KnowledgeSource], str, str, List[Dict[str, str]]]:
         diagnostic = LogParserOperations.parse_log_or_query(
             system_logs=system_logs,
             query=query,
-            formato_archivo=request.ui_context.formato_archivo
+            formato_archivo=formato_archivo,
         )
 
-        # 5. Retrieve relevant knowledge from Client's Back - Busqueda
         sources = await self.search_service.search(
             query=query,
             client_id=client_id,
             busqueda_api_url=busqueda_api_url,
             tenant_id=tenant_id,
-            category=diagnostic.category,
-            variable_num=diagnostic.affected_variable_number,
-            error_code=diagnostic.detected_code,
+            category=diagnostic.category if diagnostic else None,
+            variable_num=diagnostic.affected_variable_number if diagnostic else None,
+            error_code=diagnostic.detected_code if diagnostic else None,
+            extras=request.extras,
             top_k=4,
         )
 
-        # 6. Build specialized prompt with hardened behavioral constraints
         system_prompt = PromptBuilder.build_system_prompt(
-            request.user_context,
+            user_context=request.user_context,
             client_id=client_id,
-            client_name=client_name
+            client_name=client_name,
+            usuario=usuario,
+            role=role,
+            user_attributes=user_attrs,
         )
         user_prompt = PromptBuilder.build_user_prompt(
             query=query,
@@ -223,32 +219,37 @@ class DiagnosticOperations:
             diagnostic=diagnostic,
             knowledge_sources=sources,
             client_name=client_name,
+            context=context_dict,
+            usuario=usuario,
+            role=role,
+            user_attributes=user_attrs,
         )
 
-        # Format history for LLM
         history: List[Dict[str, str]] = [
             {"role": msg.role, "content": msg.content}
             for msg in (request.conversation_history or [])
         ]
+        return diagnostic, sources, system_prompt, user_prompt, history
 
-        # 7. Call LLM con contexto de atribución del llamador
-        response_text = await self.llm_service.generate_response(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            history=history,
-            client_id=client_id,
-            tenant_id=tenant_id,
-            usuario=usuario,
-            rol=request.user_context.permisos or "usuario",
-            operacion="DIAGNOSTIC_QUERY",
-            request_id=request_id,
-        )
-
-        # 8. Record usage metrics per user and tenant
+    async def _finalize_usage_and_audit(
+        self,
+        client_id: str,
+        tenant_id: str,
+        usuario: str,
+        effective_role: str,
+        ips_code: Optional[str],
+        operacion: str,
+        request_id: str,
+        query: str,
+        system_prompt: str,
+        user_prompt: str,
+        response_text: str,
+        start_time: float,
+    ) -> None:
         latency_ms = int((time.perf_counter() - start_time) * 1000)
         tokens_in = (len(system_prompt) + len(user_prompt)) // 4
         tokens_out = max(1, len(response_text) // 4)
-        cost_usd = (tokens_in * 0.00000015) + (tokens_out * 0.0000006)
+        cost_usd = round((tokens_in * 0.00000015) + (tokens_out * 0.0000006), 6)
 
         await self.ledger_repo.record_usage(
             UsageLedgerRecord(
@@ -256,10 +257,10 @@ class DiagnosticOperations:
                 tenant_id=tenant_id,
                 usuario=usuario,
                 ips_code=ips_code,
-                operacion="DIAGNOSTIC_QUERY",
+                operacion=operacion,
                 tokens_input=tokens_in,
                 tokens_output=tokens_out,
-                costo_usd=round(cost_usd, 6),
+                costo_usd=cost_usd,
                 latencia_ms=latency_ms,
                 status="COMPLETED",
                 is_llm_call=True,
@@ -268,22 +269,130 @@ class DiagnosticOperations:
             )
         )
 
-        # 9. Audit outbound response
         audit_logger.log_message_out(
             client_id=client_id,
             tenant_id=tenant_id,
             usuario=usuario,
             content=response_text,
             tokens=tokens_in + tokens_out,
-            costo_usd=round(cost_usd, 6),
+            costo_usd=cost_usd,
             latencia_ms=latency_ms,
             status="COMPLETED",
             ips_code=ips_code,
             request_id=request_id,
+            rol=effective_role,
         )
 
-        # 10. Build Response
-        error_model = ErrorDiagnosticModel(**diagnostic.to_dict())
+    async def execute_query(
+        self,
+        request: ChatRequest,
+        tenant_id: str,
+        client_id: str = "default",
+        busqueda_api_url: Optional[str] = None,
+        client_name: str = "la Plataforma",
+        session_metadata: Optional[Dict[str, Any]] = None,
+        session_org_code: Optional[str] = None,
+    ) -> ChatQueryResponse:
+        """Executes a synchronous chat or diagnostic query (non-streaming)."""
+        start_time = time.perf_counter()
+        request_id = str(uuid.uuid4())
+
+        usuario = request.get_usuario()
+        role = request.get_role()
+        effective_role = role or "usuario"
+        ips_code = request.get_org_code() or session_org_code
+        raw_logs = request.get_logs()
+        context_dict = request.get_context_dict()
+        user_attrs = {**(session_metadata or {}), **request.get_user_attributes()}
+        formato_archivo = request.get_formato_archivo()
+
+        query, system_logs = self._sanitize_inputs(
+            raw_query=request.query,
+            raw_logs=raw_logs,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            usuario=usuario,
+            ips_code=ips_code,
+            request_id=request_id,
+        )
+
+        audit_logger.log_message_in(
+            client_id=client_id,
+            tenant_id=tenant_id,
+            usuario=usuario,
+            content=query,
+            ips_code=ips_code,
+            request_id=request_id,
+            rol=effective_role,
+        )
+
+        guardrail = ChatGuardrails.evaluate(
+            query=query,
+            system_logs=system_logs,
+            client_name=client_name,
+        )
+        if guardrail.is_intercepted:
+            await self._record_interception(
+                guardrail=guardrail,
+                client_id=client_id,
+                tenant_id=tenant_id,
+                usuario=usuario,
+                effective_role=effective_role,
+                ips_code=ips_code,
+                request_id=request_id,
+                query=query,
+                start_time=start_time,
+            )
+            return ChatQueryResponse(
+                response=guardrail.direct_response or "",
+                error_diagnostic=None,
+                sources=[],
+            )
+
+        diagnostic, sources, system_prompt, user_prompt, history = await self._prepare_llm_context(
+            request=request,
+            query=query,
+            system_logs=system_logs,
+            client_id=client_id,
+            client_name=client_name,
+            tenant_id=tenant_id,
+            busqueda_api_url=busqueda_api_url,
+            usuario=usuario,
+            role=role,
+            user_attrs=user_attrs,
+            context_dict=context_dict,
+            formato_archivo=formato_archivo,
+        )
+
+        response_text = await self.llm_service.generate_response(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            history=history,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            usuario=usuario,
+            rol=effective_role,
+            ips_code=ips_code,
+            operacion="CHAT_QUERY",
+            request_id=request_id,
+        )
+
+        await self._finalize_usage_and_audit(
+            client_id=client_id,
+            tenant_id=tenant_id,
+            usuario=usuario,
+            effective_role=effective_role,
+            ips_code=ips_code,
+            operacion="CHAT_QUERY",
+            request_id=request_id,
+            query=query,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            response_text=response_text,
+            start_time=start_time,
+        )
+
+        error_model = ErrorDiagnosticModel(**diagnostic.to_dict()) if diagnostic else None
         source_items = [
             SourceItem(
                 document_title=s.document_title,
@@ -293,7 +402,7 @@ class DiagnosticOperations:
             for s in sources
         ]
 
-        return DiagnosticQueryResponse(
+        return ChatQueryResponse(
             response=response_text,
             error_diagnostic=error_model,
             sources=source_items,
@@ -301,15 +410,16 @@ class DiagnosticOperations:
 
     async def execute_stream(
         self,
-        request: DiagnosticStreamRequest,
+        request: ChatRequest,
         tenant_id: str,
-        client_id: str = "sigires",
+        client_id: str = "default",
         busqueda_api_url: Optional[str] = None,
-        client_name: str = "SIGIRES",
+        client_name: str = "la Plataforma",
+        session_metadata: Optional[Dict[str, Any]] = None,
+        session_org_code: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
-        Executes a real-time diagnostic stream emitting Server-Sent Events (SSE).
-        Conforms strictly to the contract in especificacion-api-integracion-widget.md:
+        Executes a real-time chat or diagnostic stream emitting Server-Sent Events (SSE):
         - event: chunk
         - event: error_diagnostic
         - event: sources
@@ -317,30 +427,26 @@ class DiagnosticOperations:
         """
         start_time = time.perf_counter()
         request_id = str(uuid.uuid4())
-        usuario = request.user_context.usuario or "anonimo"
-        ips_code = request.user_context.ips_code
 
-        # 1. PII Sanitization
-        query = request.query
-        system_logs = request.system_logs
-        if self.enable_pii_scrubbing:
-            sanitized_query = PIISanitizer.sanitize(query) or query
-            sanitized_logs = PIISanitizer.sanitize(system_logs)
-            if sanitized_query != query or sanitized_logs != system_logs:
-                audit_logger.log_security_event(
-                    event_type="PII_MASKED_IN_PAYLOAD",
-                    severity="LOW",
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    details={"field": "query_or_logs", "rule": "Ley 1581 de 2012"},
-                    ips_code=ips_code,
-                    request_id=request_id,
-                )
-            query = sanitized_query
-            system_logs = sanitized_logs
+        usuario = request.get_usuario()
+        role = request.get_role()
+        effective_role = role or "usuario"
+        ips_code = request.get_org_code() or session_org_code
+        raw_logs = request.get_logs()
+        context_dict = request.get_context_dict()
+        user_attrs = {**(session_metadata or {}), **request.get_user_attributes()}
+        formato_archivo = request.get_formato_archivo()
 
-        # 2. Audit inbound message
+        query, system_logs = self._sanitize_inputs(
+            raw_query=request.query,
+            raw_logs=raw_logs,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            usuario=usuario,
+            ips_code=ips_code,
+            request_id=request_id,
+        )
+
         audit_logger.log_message_in(
             client_id=client_id,
             tenant_id=tenant_id,
@@ -348,43 +454,16 @@ class DiagnosticOperations:
             content=query,
             ips_code=ips_code,
             request_id=request_id,
+            rol=effective_role,
         )
 
-        # 3. Guardrails Pre-LLM check (Greetings, Prompt Injections, Out-of-Domain)
         guardrail = ChatGuardrails.evaluate(
             query=query,
             system_logs=system_logs,
-            client_name=client_name
+            client_name=client_name,
         )
-
         if guardrail.is_intercepted:
             direct_text = guardrail.direct_response or ""
-
-            # Security audit logging if blocked or out-of-domain
-            if guardrail.status == "SECURITY_BLOCKED":
-                audit_logger.log_security_event(
-                    event_type="PROMPT_INJECTION_ATTEMPT",
-                    severity="HIGH",
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    details={"query": query, "reason": guardrail.reason},
-                    ips_code=ips_code,
-                    request_id=request_id,
-                )
-            elif guardrail.status == "OUT_OF_DOMAIN":
-                audit_logger.log_security_event(
-                    event_type="OUT_OF_DOMAIN_QUERY",
-                    severity="MEDIUM",
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    details={"query": query},
-                    ips_code=ips_code,
-                    request_id=request_id,
-                )
-
-            # Stream direct text via SSE chunks with natural pacing
             words = direct_text.split(" ")
             for i, word in enumerate(words):
                 chunk = word + (" " if i < len(words) - 1 else "")
@@ -392,112 +471,38 @@ class DiagnosticOperations:
                 yield f"event: chunk\ndata: {chunk_data}\n\n"
                 await asyncio.sleep(0.005)
 
-            # Emit clean/empty error diagnostic
-            yield f"event: error_diagnostic\ndata: null\n\n"
+            yield "event: error_diagnostic\ndata: null\n\n"
+            yield "event: sources\ndata: []\n\n"
+            yield f"event: done\ndata: {json.dumps({'status': guardrail.status})}\n\n"
 
-            # Emit empty sources
-            yield f"event: sources\ndata: []\n\n"
-
-            # Emit done
-            done_json = json.dumps({"status": guardrail.status})
-            yield f"event: done\ndata: {done_json}\n\n"
-
-            # Record usage with 0 LLM tokens
-            latency_ms = int((time.perf_counter() - start_time) * 1000)
-            await self.ledger_repo.record_usage(
-                UsageLedgerRecord(
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    usuario=usuario,
-                    ips_code=ips_code,
-                    operacion=guardrail.status,
-                    tokens_input=0,
-                    tokens_output=0,
-                    costo_usd=0.0,
-                    latencia_ms=latency_ms,
-                    status=guardrail.status,
-                    is_llm_call=False,
-                    request_id=request_id,
-                    query_preview=query[:100],
-                )
-            )
-
-            # Notificar al LLM Gateway de evento no-LLM si está disponible
-            if hasattr(self.llm_service, "record_usage_event"):
-                try:
-                    await self.llm_service.record_usage_event(
-                        client_id=client_id,
-                        tenant_id=tenant_id,
-                        usuario=usuario,
-                        operacion=guardrail.status,
-                        is_llm_call=False,
-                        tokens_input=0,
-                        tokens_output=0,
-                        costo_usd=0.0,
-                        latencia_ms=latency_ms,
-                        rol=request.user_context.permisos or "usuario",
-                        status=guardrail.status,
-                        request_id=request_id,
-                    )
-                except Exception:
-                    pass
-
-            # Audit outbound response
-            audit_logger.log_message_out(
+            await self._record_interception(
+                guardrail=guardrail,
                 client_id=client_id,
                 tenant_id=tenant_id,
                 usuario=usuario,
-                content=direct_text,
-                tokens=0,
-                costo_usd=0.0,
-                latencia_ms=latency_ms,
-                status=guardrail.status,
+                effective_role=effective_role,
                 ips_code=ips_code,
                 request_id=request_id,
+                query=query,
+                start_time=start_time,
             )
             return
 
-        # 4. Parse log and classify error
-        diagnostic = LogParserOperations.parse_log_or_query(
-            system_logs=system_logs,
-            query=query,
-            formato_archivo=request.ui_context.formato_archivo
-        )
-
-        # 5. Retrieve relevant knowledge from Client's Back - Busqueda
-        sources = await self.search_service.search(
-            query=query,
-            client_id=client_id,
-            busqueda_api_url=busqueda_api_url,
-            tenant_id=tenant_id,
-            category=diagnostic.category,
-            variable_num=diagnostic.affected_variable_number,
-            error_code=diagnostic.detected_code,
-            top_k=4,
-        )
-
-        # 6. Build specialized prompt with hardened boundaries
-        system_prompt = PromptBuilder.build_system_prompt(
-            request.user_context,
-            client_id=client_id,
-            client_name=client_name
-        )
-        user_prompt = PromptBuilder.build_user_prompt(
+        diagnostic, sources, system_prompt, user_prompt, history = await self._prepare_llm_context(
+            request=request,
             query=query,
             system_logs=system_logs,
-            ui_context=request.ui_context,
-            user_context=request.user_context,
-            diagnostic=diagnostic,
-            knowledge_sources=sources,
+            client_id=client_id,
             client_name=client_name,
+            tenant_id=tenant_id,
+            busqueda_api_url=busqueda_api_url,
+            usuario=usuario,
+            role=role,
+            user_attrs=user_attrs,
+            context_dict=context_dict,
+            formato_archivo=formato_archivo,
         )
 
-        history: List[Dict[str, str]] = [
-            {"role": msg.role, "content": msg.content}
-            for msg in (request.conversation_history or [])
-        ]
-
-        # 7. Stream LLM tokens as SSE chunks con contexto de atribución
         full_text_accum = []
         try:
             async for token in self.llm_service.generate_stream(
@@ -507,8 +512,9 @@ class DiagnosticOperations:
                 client_id=client_id,
                 tenant_id=tenant_id,
                 usuario=usuario,
-                rol=request.user_context.permisos or "usuario",
-                operacion="DIAGNOSTIC_STREAM",
+                rol=effective_role,
+                ips_code=ips_code,
+                operacion="CHAT_STREAM",
                 request_id=request_id,
             ):
                 full_text_accum.append(token)
@@ -526,55 +532,31 @@ class DiagnosticOperations:
             error_data = json.dumps({"error": f"Error en inferencia LLM: {str(e)}"})
             yield f"event: error\ndata: {error_data}\n\n"
 
-        # 8. Emit error_diagnostic event
-        diag_dict = diagnostic.to_dict()
-        diag_json = json.dumps(diag_dict, ensure_ascii=False)
-        yield f"event: error_diagnostic\ndata: {diag_json}\n\n"
+        if diagnostic is not None:
+            diag_json = json.dumps(diagnostic.to_dict(), ensure_ascii=False)
+            yield f"event: error_diagnostic\ndata: {diag_json}\n\n"
+        else:
+            yield "event: error_diagnostic\ndata: null\n\n"
 
-        # 9. Emit sources event
         sources_list = [s.to_dict() for s in sources]
         sources_json = json.dumps(sources_list, ensure_ascii=False)
         yield f"event: sources\ndata: {sources_json}\n\n"
 
-        # 10. Emit done event
         done_json = json.dumps({"status": "COMPLETED"})
         yield f"event: done\ndata: {done_json}\n\n"
 
-        # 11. Record usage metrics per user and tenant
-        latency_ms = int((time.perf_counter() - start_time) * 1000)
         full_text = "".join(full_text_accum)
-        tokens_in = (len(system_prompt) + len(user_prompt)) // 4
-        tokens_out = max(1, len(full_text) // 4)
-        cost_usd = (tokens_in * 0.00000015) + (tokens_out * 0.0000006)
-
-        await self.ledger_repo.record_usage(
-            UsageLedgerRecord(
-                client_id=client_id,
-                tenant_id=tenant_id,
-                usuario=usuario,
-                ips_code=ips_code,
-                operacion="DIAGNOSTIC_STREAM",
-                tokens_input=tokens_in,
-                tokens_output=tokens_out,
-                costo_usd=round(cost_usd, 6),
-                latencia_ms=latency_ms,
-                status="COMPLETED",
-                is_llm_call=True,
-                request_id=request_id,
-                query_preview=query[:100],
-            )
-        )
-
-        # 12. Audit outbound response
-        audit_logger.log_message_out(
+        await self._finalize_usage_and_audit(
             client_id=client_id,
             tenant_id=tenant_id,
             usuario=usuario,
-            content=full_text,
-            tokens=tokens_in + tokens_out,
-            costo_usd=round(cost_usd, 6),
-            latencia_ms=latency_ms,
-            status="COMPLETED",
+            effective_role=effective_role,
             ips_code=ips_code,
+            operacion="CHAT_STREAM",
             request_id=request_id,
+            query=query,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            response_text=full_text,
+            start_time=start_time,
         )

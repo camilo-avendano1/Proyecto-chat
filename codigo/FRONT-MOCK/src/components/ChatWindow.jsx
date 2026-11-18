@@ -135,7 +135,7 @@ export default function ChatWindow({
       <div className="chat-banner">
         <div className="chat-banner-item">
           <Bot size={15} style={{ color: '#10b981' }} />
-          <span>Asistente Técnico de Formularios y Reglamentos • Búsqueda RAG Dinámica</span>
+          <span>Asistente Virtual SaaS • Búsqueda RAG Dinámica Multi-Cliente</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -188,30 +188,42 @@ export default function ChatWindow({
               <Sparkles size={32} />
             </div>
             <h2 style={{ color: 'var(--text-bright)', fontSize: '1.25rem', marginBottom: '8px' }}>
-              Simulador del Asistente Técnico de Formularios y Reglamentos
+              Simulador del Asistente Virtual SaaS Multi-Cliente
             </h2>
             <p style={{ fontSize: '0.85rem', lineHeight: '1.6', marginBottom: '20px' }}>
-              Consulta sobre el diligenciamiento y validación de formularios clínicos, de enfermería o administrativos
-              en diferentes formatos (CSV, TXT, XML, JSON, ZIP). Los documentos y reglamentos se recuperan dinámicamente desde la búsqueda.
+              Realiza consultas generales, flujos corporativos con contexto y extras JSON, o diagnóstico técnico de
+              formularios y logs (CSV, TXT, XML, JSON, ZIP). Los documentos se recuperan dinámicamente desde la búsqueda RAG de cada cliente.
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <button 
+              <button
                 className="chip-btn"
-                onClick={() => onQuickPrompt('Tengo un error al subir el formulario de enfermería en el campo de signos vitales')}
+                onClick={() => onQuickPrompt('¿Cómo se aprueba una orden de compra?')}
               >
-                🩺 Formulario Enfermería (CSV/Web)
+                💬 Consulta Mínima Genérica
               </button>
-              <button 
+              <button
                 className="chip-btn"
-                onClick={() => onQuickPrompt('¿Cómo subsano la inconsistencia de códigos en el formato RIPS?')}
+                onClick={() => onQuickPrompt('¿Cuál es el límite de aprobación para compras de tecnología?')}
               >
-                📋 Formato RIPS / Facturación
+                🏢 Consulta Corporativa (Contexto)
               </button>
-              <button 
+              <button
+                className="chip-btn"
+                onClick={() => onQuickPrompt('Al subir el formulario de enfermería tengo un error de validación en el campo 6 de signos vitales')}
+              >
+                🩺 Ejemplo Técnico + Log
+              </button>
+              <button
                 className="chip-btn"
                 onClick={() => onQuickPrompt('Hola, ¿qué funciones tienes disponibles?')}
               >
                 ⚡ Fast-Path Saludo
+              </button>
+              <button
+                className="chip-btn"
+                onClick={() => onQuickPrompt('¿Cómo preparo arroz con mariscos?')}
+              >
+                🛡️ Guardrail Fuera de Dominio
               </button>
             </div>
           </div>
@@ -227,7 +239,7 @@ export default function ChatWindow({
 
               <div className="bubble-content-wrap">
                 <div className="bubble-header">
-                  <span>{isUser ? 'Usuario IPS' : 'Core Back Central'}</span>
+                  <span>{isUser ? 'Usuario' : 'Core Back Central'}</span>
                   <span>•</span>
                   <span>{msg.timestamp || 'Ahora'}</span>
                   {!isUser && (
@@ -299,7 +311,7 @@ export default function ChatWindow({
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <BookOpen size={13} />
-                          <span>Fuentes Normativas Consultadas ({msg.sources.length})</span>
+                          <span>Fuentes Documentales Consultadas ({msg.sources.length})</span>
                         </div>
                         {sourcesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </div>
@@ -384,7 +396,7 @@ export default function ChatWindow({
                     <div className="sources-header">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <BookOpen size={13} />
-                        <span>Fuentes Normativas Identificadas ({activeSources.length})</span>
+                        <span>Fuentes Documentales Identificadas ({activeSources.length})</span>
                       </div>
                     </div>
                     <div className="sources-list">
@@ -409,33 +421,40 @@ export default function ChatWindow({
       <div className="chat-input-area">
         {/* Quick Prompts Row */}
         <div className="quick-prompts-row">
-          <button 
+          <button
             className="quick-prompt-btn"
-            onClick={() => onQuickPrompt('Tengo un error en el formulario de enfermería en los signos vitales')}
+            onClick={() => onQuickPrompt('¿Cómo se aprueba una orden de compra?')}
           >
             <Sparkles size={12} style={{ color: '#10b981' }} />
-            Formulario Enfermería
+            Consulta Mínima Genérica
           </button>
-          <button 
+          <button
             className="quick-prompt-btn"
-            onClick={() => onQuickPrompt('El validador me rechaza el formato de fecha en el registro 45')}
+            onClick={() => onQuickPrompt('¿Cuál es el límite de aprobación para compras de tecnología?')}
+          >
+            <FileCheck size={12} style={{ color: '#818cf8' }} />
+            Consulta Corporativa
+          </button>
+          <button
+            className="quick-prompt-btn"
+            onClick={() => onQuickPrompt('Al subir el formulario de enfermería tengo un error de validación en el campo 6 de signos vitales')}
           >
             <AlertTriangle size={12} style={{ color: '#0ea5e9' }} />
-            Error Formato Fecha
+            Ejemplo Técnico + Log
           </button>
-          <button 
+          <button
             className="quick-prompt-btn"
             onClick={() => onQuickPrompt('Hola, ¿cómo estás?')}
           >
             <Zap size={12} style={{ color: '#f59e0b' }} />
             Fast-Path (0 Tokens)
           </button>
-          <button 
+          <button
             className="quick-prompt-btn"
             onClick={() => onQuickPrompt('¿Cómo preparo arroz con mariscos?')}
           >
             <ShieldAlert size={12} style={{ color: '#ef4444' }} />
-            Prueba Guardrail (Fuera Dominio)
+            Guardrail (Fuera Dominio)
           </button>
         </div>
 
@@ -443,7 +462,7 @@ export default function ChatWindow({
         <div className="input-box-wrapper">
           <textarea
             className="chat-input-textarea"
-            placeholder="Escribe tu consulta sobre formularios, formatos o reglamentos técnicos... (Presiona Enter para enviar)"
+            placeholder="Escribe tu consulta para el asistente virtual SaaS... (Presiona Enter para enviar)"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
             onKeyDown={handleKeyDown}

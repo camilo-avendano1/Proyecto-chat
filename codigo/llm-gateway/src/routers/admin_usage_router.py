@@ -2,6 +2,7 @@
 Router for Usage Monitoring and Token Observability (LLM Gateway).
 Endpoints:
 - GET /api/v1/usage
+- GET /api/v1/usage/summary
 - GET /api/v1/usage/by-user
 - GET /api/v1/usage/by-tenant
 - GET /api/v1/usage/by-role
@@ -56,6 +57,29 @@ async def get_usage_summary(
 
 
 @router.get(
+    "/summary",
+    response_model=UsageSummaryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Resumen Global de Consumo de Tokens (Alias)",
+    description="Alias de GET /api/v1/usage. Calcula el consolidado de tokens, costos y ahorro por fast-path."
+)
+async def get_usage_summary_alias(
+    tenant_id: Optional[str] = Query(None, description="Filtrar por Tenant"),
+    usuario: Optional[str] = Query(None, description="Filtrar por Usuario"),
+    client_id: Optional[str] = Query(None, description="Filtrar por Cliente"),
+    auth_ctx: Dict[str, Any] = Depends(require_admin_or_internal),
+    db: Session = Depends(get_db),
+):
+    return await get_usage_summary(
+        tenant_id=tenant_id,
+        usuario=usuario,
+        client_id=client_id,
+        auth_ctx=auth_ctx,
+        db=db,
+    )
+
+
+@router.get(
     "/by-user",
     response_model=List[UserUsageResponse],
     status_code=status.HTTP_200_OK,
@@ -96,8 +120,8 @@ async def get_usage_by_tenant(
     "/by-role",
     response_model=List[RoleUsageResponse],
     status_code=status.HTTP_200_OK,
-    summary="Consumo Agrupado por Rol Asistencial/Técnico",
-    description="Segmenta el consumo por perfil: PERFIL_IPS_MEDICO, PERFIL_IPS_RADICADOR, etc."
+    summary="Consumo Agrupado por Rol",
+    description="Segmenta el consumo de tokens y costos por rol o perfil de usuario del cliente."
 )
 async def get_usage_by_role(
     client_id: Optional[str] = Query(None, description="Filtrar por Cliente"),

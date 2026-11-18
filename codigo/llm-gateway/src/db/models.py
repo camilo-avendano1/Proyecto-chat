@@ -37,7 +37,7 @@ class UsageRecordORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ledger_id: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
     request_id: Mapped[Optional[str]] = mapped_column(String(64), index=True, nullable=True)
-    client_id: Mapped[str] = mapped_column(String(100), index=True, default="sigires")
+    client_id: Mapped[str] = mapped_column(String(100), index=True, default="default")
     tenant_id: Mapped[str] = mapped_column(String(100), index=True, default="unknown")
     usuario: Mapped[str] = mapped_column(String(255), index=True, default="anonimo")
     rol: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)

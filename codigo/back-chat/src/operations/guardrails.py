@@ -115,7 +115,12 @@ class ChatGuardrails:
         "validador", "validacion", "rechazo", "inconsistencia", "archivo", "plano",
         "txt", "csv", "xml", "json", "zip", "excel", "xlsx", "fase", "delimitador",
         "pipeline", "estructura", "calidad", "dato", "eps", "ips", "habilitacion",
-        "rips", "cac", "rias", "sigires", "202", "3280", "3374"
+        "rips", "cac", "rias", "sigires", "202", "3280", "3374",
+        "sistema", "plataforma", "proceso", "procedimiento", "politica", "política",
+        "orden", "compra", "factura", "solicitud", "ticket", "soporte", "cuenta",
+        "usuario", "permiso", "reporte", "servicio", "cliente", "contrato", "pago",
+        "pedido", "inventario", "configuracion", "configuración", "api",
+        "integracion", "integración", "consulta", "fallo",
     ]
 
     @classmethod
@@ -135,10 +140,10 @@ class ChatGuardrails:
                     severity="HIGH",
                     reason="PROMPT_INJECTION_DETECTED",
                     direct_response=(
-                        f"Como Asistente Técnico y Normativo de {client_name}, opero bajo estrictas "
+                        f"Como Asistente Virtual de {client_name}, opero bajo estrictas "
                         "políticas de gobernanza y seguridad de la información. No tengo permitido "
                         "modificar mis directrices de comportamiento, ejecutar código o funciones externas, "
-                        "ni atender instrucciones ajenas a la asistencia técnica de formularios, formatos y reglamentos."
+                        "ni atender instrucciones ajenas al soporte y documentación de la plataforma."
                     )
                 )
 
@@ -152,8 +157,8 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="GREETING_DETECTED",
                 direct_response=(
-                    f"¡Hola! Soy tu Asistente Técnico para {client_name}.\n\n"
-                    "¿En qué puedo orientarte hoy con el diligenciamiento de formularios, validación de formatos o consulta de reglamentos técnicos?"
+                    f"¡Hola! Soy el Asistente Virtual de {client_name}.\n\n"
+                    "¿En qué puedo ayudarte hoy con procesos, documentación, validación de datos o soporte dentro de la plataforma?"
                 )
             )
 
@@ -164,10 +169,10 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="IDENTITY_INQUIRY",
                 direct_response=(
-                    f"Soy el Asistente Técnico y Normativo de {client_name}.\n\n"
-                    "Asisto a médicos, enfermeros, radicadores y auditores en el diligenciamiento y validación "
-                    "de formularios en distintos formatos conforme a los reglamentos vigentes. Indícame tu consulta, "
-                    "el formulario o el código de error y consultaré la documentación normativa para guiarte."
+                    f"Soy el Asistente Virtual de {client_name}.\n\n"
+                    "Puedo ayudarte a resolver dudas sobre procesos operativos, manuales, políticas, "
+                    "flujos de trabajo y fallos técnicos en la plataforma. Indícame tu consulta o el detalle "
+                    "del incidente y consultaré la documentación disponible para guiarte."
                 )
             )
 
@@ -178,8 +183,8 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="GRATITUDE_DETECTED",
                 direct_response=(
-                    f"¡Con mucho gusto! Recuerda que estoy disponible para apoyarte en la validación y cargue "
-                    f"de tus formularios y archivos según los reglamentos en {client_name}. ¡Que tengas un excelente día!"
+                    f"¡Con mucho gusto! Estoy disponible cuando necesites orientación sobre procesos, "
+                    f"documentación o soporte en {client_name}. ¡Que tengas un excelente día!"
                 )
             )
 
@@ -190,7 +195,7 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="FAREWELL_DETECTED",
                 direct_response=(
-                    f"¡Hasta luego! Quedo a tu disposición cuando requieras asistencia técnica con tus formularios y reglamentos en {client_name}."
+                    f"¡Hasta luego! Quedo a tu disposición cuando necesites ayuda con la plataforma {client_name}."
                 )
             )
 
@@ -201,8 +206,8 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="AFFIRMATION_DETECTED",
                 direct_response=(
-                    f"Entendido. Si presentas alguna inconsistencia en un formulario o tienes dudas sobre un formato "
-                    f"o reglamento técnico en {client_name}, por favor indícame el campo o error para orientarte."
+                    f"Entendido. Si tienes alguna consulta adicional sobre procesos, documentación o algún "
+                    f"incidente técnico en {client_name}, por favor indícamelo para ayudarte."
                 )
             )
 
@@ -223,11 +228,10 @@ class ChatGuardrails:
                             severity="WARNING",
                             reason="OUT_OF_DOMAIN_QUERY",
                             direct_response=(
-                                f"Mi función está especializada exclusivamente en el diagnóstico técnico de formularios, "
-                                f"validación de archivos en distintos formatos y consulta de reglamentos técnicos en {client_name}.\n\n"
-                                "No tengo permitido responder consultas sobre temas ajenos a la plataforma asistencial. "
-                                "Si presentas alguna inconsistencia en un formulario, formato de cargue o regla de validación, "
-                                "con gusto te asisto."
+                                f"Mi función como Asistente Virtual de {client_name} está enfocada "
+                                "exclusivamente en asistirte con procesos, documentación, soporte técnico y uso de la plataforma.\n\n"
+                                "No tengo permitido responder consultas sobre temas ajenos al entorno operativo. "
+                                "Si tienes alguna duda sobre un flujo, documento o incidente técnico, con gusto te asisto."
                             )
                         )
 

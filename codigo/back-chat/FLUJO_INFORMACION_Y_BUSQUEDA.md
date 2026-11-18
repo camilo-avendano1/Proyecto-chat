@@ -1,67 +1,72 @@
-# Flujo de Información, Rol del System Prompt e Integración con Back - Búsqueda (RAG)
+# Flujo de Información, System Prompt e Integración con Back - Búsqueda (RAG)
 
-Este documento explica cómo procesa la información el microservicio **`back-chat`**, por qué su diseño es general y desacoplado de un caso o reglamento puntual, cuál es la función exacta del **System Prompt**, y cómo **`back-busqueda`** provee dinámicamente las situaciones, documentos y reglamentos para darle contexto al LLM al momento de responder.
+Este documento explica cómo procesa la información el microservicio **`back-chat`**, por qué su diseño es genérico y multi-cliente (desde una petición mínima `{"query": "..."}` hasta consultas enriquecidas con contexto, logs y `extras`), y cómo **`back-busqueda`** provee dinámicamente el conocimiento de cada cliente.
 
 ---
 
-## 1. Principio Arquitectónico: Desacoplamiento entre Rol y Conocimiento Normativo
+## 1. Principio Arquitectónico: Núcleo Agnóstico al Cliente
 
-El sistema separa estrictamente dos responsabilidades que no deben mezclarse:
+El sistema separa estrictamente la orquestación conversacional del conocimiento particular de cada empresa:
 
-1. **El System Prompt ([`PromptBuilder`](src/operations/prompt_builder.py)):**
-   - **Solo define el rol y comportamiento del asistente:** actuar como un **Asistente Técnico Especializado** para médicos, enfermeros, radicadores, auditores y analistas que deben diligenciar, validar o subir diferentes formularios y archivos en múltiples formatos (`CSV`, `TXT`, `XML`, `JSON`, `ZIP`, formularios web).
-   - **No contiene reglamentos ni variables quemadas:** no asume de antemano una resolución, ni un número fijo de columnas, ni un caso puntual de un cliente.
-   - Instruye al LLM a basar su diagnóstico, regla técnica y fundamento normativo **exclusivamente en los documentos y reglamentos recuperados por la búsqueda** e inyectados en el prompt de la consulta.
-
-2. **La Búsqueda Semántica / RAG ([`BusquedaHttpClient`](src/infrastructure/external/busqueda_client.py) -> `back-busqueda`):**
-   - **Es la fuente de verdad de situaciones, documentos y reglamentos:** cuando el profesional hace una pregunta o adjunta un log de validación, `back-chat` consulta a `back-busqueda` (`/api/v1/search`) enviando la pregunta sanitizada y los metadatos extraídos del log (fila, campo/variable, código de error, fase/categoría).
-   - `back-busqueda` retorna los fragmentos exactos del reglamento, manual o anexo técnico aplicable a ese formulario y cliente, los cuales se inyectan en el **User Prompt** para darle todo el contexto normativo al LLM antes de generar la respuesta.
+1. **Contrato de Entrada Flexible (`/api/v1/chat/stream` y `/api/v1/chat/query`):**
+   - **Modo Mínimo:** Un cliente nuevo puede integrarse enviando únicamente `{"query": "¿Cómo se aprueba una orden de compra?"}` (junto con `conversation_history` si hay historial).
+   - **Modo Enriquecido (Opcional):** El integrador puede añadir `user`, `context`, `logs` y `extras` cuando su aplicación disponga de contexto de pantalla, trazas de error o metadatos de filtrado.
+   - **Compatibilidad Retroactiva:** Se conservan `/api/v1/diagnostic/stream` y `/api/v1/diagnostic/query` (y los nombres de campo `system_logs`, `ui_context`, `user_context`) para clientes legacy como SIGIRES.
+2. **El System Prompt ([`PromptBuilder`](src/operations/prompt_builder.py)):**
+   - Define el rol del asistente virtual adaptado al `client_name` y al perfil del usuario (si se suministra), instruyendo al modelo a responder con base en los fragmentos recuperados por `back-busqueda`.
+   - No contiene reglas, catálogos ni resoluciones específicas quemadas en el código.
+3. **La Búsqueda Semántica / RAG ([`BusquedaHttpClient`](src/infrastructure/external/busqueda_client.py) -> `back-busqueda`):**
+   - Es la fuente de verdad de manuales, políticas, procesos, definiciones de campos y reglamentos de cada cliente.
+   - Recibe `query`, `client_id`, `tenant_id`, `top_k` y `extras` sanitizados desde `back-chat`.
 
 ---
 
 ## 2. Etapas del Flujo Interno en `back-chat`
 
-### A. Extracción Genérica de Metadatos de Logs ([`LogParserOperations`](src/operations/log_parser_operations.py))
-Cuando el médico, enfermero o radicador adjunta un log de error o describe un fallo:
-```text
-Fila: 12 | Campo: 6 | Variable 'Signos_Vitales' fuera de rango permitido. Error CE_CAMPO_006_INVAL
-```
-El parser extrae señales estructurales **sin depender de ningún catálogo normativo fijo**:
-- **Fila / Registro afectado:** `12`
-- **Campo / Variable afectada:** `6` (y el nombre explícito `'Signos_Vitales'` si viene citado en la traza)
-- **Código de Error:** `CE_CAMPO_006_INVAL`
-- **Fase y Categoría genérica:**
-  - `FASE_1_CA` (`CALIDAD_ARCHIVO_FORMATO`): estructura del archivo, delimitadores, codificación, extensión.
-  - `FASE_2_CE` (`CALIDAD_ESTRUCTURA_CAMPOS`): tipos de dato, fechas, rangos, catálogos permitidos.
-  - `FASE_3_CD` (`CALIDAD_DATOS_CRUCES_LOGICOS`): coherencia cruzada entre campos clínicos o administrativos.
+### A. Sanitización y Guardrails Pre-LLM
+1. **PII / PHI Sanitizer:** Enmascara datos personales sensibles (cédulas, teléfonos, correos, etc.) en `query` y `logs` antes de consultar servicios externos o almacenar trazas (Ley 1581 de 2012).
+2. **Guardrails (`ChatGuardrails`):** Intercepta saludos/despedidas (Fast-Path con `0` tokens), intentos de Prompt Injection y consultas explícitamente fuera de dominio.
 
-### B. Consulta al Servicio de Búsqueda (`back-busqueda`)
-Con la pregunta y los metadatos extraídos, [`BusquedaHttpClient`](src/infrastructure/external/busqueda_client.py) realiza una petición `POST` a la URL configurada para el cliente (`http://localhost:8001/api/v1/search` por defecto):
-- Si `back-busqueda` responde (`200 OK`), sus fragmentos (`chunks` / `results`) se convierten en objetos [`KnowledgeSource`](src/domain/entities.py) y se inyectan directamente en el prompt del LLM.
-- **Modo de Contingencia Local (Solo si `back-busqueda` está apagado en desarrollo):** Si el servicio externo no responde y `FALLBACK_LOCAL_SEARCH=true`, se utiliza un banco ligero de contingencia general. Si ninguna palabra clave coincide, retorna una guía técnica general de validación de formularios (nunca fuerza un caso puntual como una variable específica).
+### B. Extracción Condicional de Metadatos (`LogParserOperations`)
+- **Consultas Generales (sin `logs` ni códigos de error técnicos):** No fuerza un diagnóstico artificial; `error_diagnostic` se retorna como `null` (JSON) o `data: null` (SSE).
+- **Consultas con Trazas (`logs`) o Errores Técnicos:** Extrae señales genéricas sin depender de una norma fija:
+  - **Fila / Registro afectado**
+  - **Campo / Variable / Columna afectada**
+  - **Código de error**
+  - **Fase de validación:** `FASE_1_CA` (Archivo/Formato), `FASE_2_CE` (Estructura/Campos), `FASE_3_CD` (Datos/Coherencia).
 
-### C. Ensamblaje del Prompt ([`PromptBuilder`](src/operations/prompt_builder.py))
-- **`build_system_prompt`**: Configura el rol del asistente técnico adaptado al perfil del usuario (`Estimado Dr.`, `Estimado(a) Profesional de Enfermería`, `Estimado Radicador`, `Estimado Auditor`) y establece las reglas de concisión, formato en 4 secciones y guardrails de seguridad.
-- **`build_user_prompt`**: Inyecta:
-  1. Contexto del cliente y del profesional.
-  2. Contexto de la pantalla y formato del formulario activo (`formato_archivo`, `pagina_actual`, `modulo`).
-  3. Metadatos técnicos extraídos del log.
-  4. **Documentos y reglamentos recuperados de la búsqueda (`knowledge_sources`)** para que el LLM responda con contexto real.
+### C. Consulta al Servicio de Búsqueda (`back-busqueda`)
+[`BusquedaHttpClient`](src/infrastructure/external/busqueda_client.py) realiza un `POST` a la URL configurada para el cliente (`http://localhost:8001/api/v1/search` por defecto):
+- Combina los `extras` enviados por el llamador con cualquier pista técnica extraída de `logs` (aplicando `sanitize_extras`: claves `snake_case`, valores escalares o listas planas, máx. 20 claves).
+- Si `back-busqueda` responde `200 OK`, convierte `results` / `chunks` en `KnowledgeSource` y los inyecta en el prompt.
+- Si `back-busqueda` no está disponible y `FALLBACK_LOCAL_SEARCH=true`, usa un banco de contingencia neutro.
+
+### D. Ensamblaje del Prompt e Inferencia (`llm-gateway`)
+- Construye `system_prompt` y `user_prompt` (incluyendo únicamente las secciones de `user`, `context`, `logs` y `error_diagnostic` que realmente existan en la petición, más los fragmentos RAG).
+- Envía la inferencia a `llm-gateway` (`POST /internal/v1/chat`) con la atribución de `client_id`, `tenant_id`, `usuario`, `rol` y `operacion`, emitiendo chunks SSE o JSON consolidado.
 
 ---
 
 ## 3. Contrato de Comunicación con `back-busqueda`
 
-### A. Petición enviada desde `back-chat` (Request)
+### A. Petición Genérica Mínima (Ej. `otra_empresa`)
 
 - **Método HTTP:** `POST`
-- **URL por defecto:** `http://localhost:8001/api/v1/search`  
-  *(o la URL configurada por cliente en `CLIENT_BUSQUEDA_URLS`)*
-- **Headers:**  
-  - `Content-Type: application/json`
-  - `X-Internal-Key: <BUSQUEDA_SERVICE_KEY>`
-  - `X-Request-ID: <UUID>`
-- **Payload JSON:**
+- **URL por defecto:** `http://localhost:8001/api/v1/search` *(o la URL por cliente en `CLIENT_BUSQUEDA_URLS`)*
+- **Headers:** `Content-Type: application/json`, `X-Internal-Key: <BUSQUEDA_SERVICE_KEY>`, `X-Request-ID: <UUID>`
+
+```json
+{
+  "query": "¿Cómo se aprueba una orden de compra?",
+  "client_id": "otra_empresa",
+  "tenant_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
+  "top_k": 4,
+  "extras": {}
+}
+```
+
+### B. Petición con `extras` Personalizados o Pistas de Log (Ej. SIGIRES)
+
 ```json
 {
   "query": "Al subir el formulario de enfermería tengo un error de validación en el campo 6 de signos vitales",
@@ -76,26 +81,19 @@ Con la pregunta y los metadatos extraídos, [`BusquedaHttpClient`](src/infrastru
 }
 ```
 
-### B. Respuesta esperada por `back-chat` (Response)
+### C. Respuesta esperada por `back-chat` (`200 OK`)
 
-El microservicio `back-busqueda` responde con código `200 OK` y la lista de fragmentos relevantes bajo `"chunks"` o `"results"`:
+`back-busqueda` retorna la lista de fragmentos relevantes bajo `"results"` o `"chunks"`:
 
 ```json
 {
-  "chunks": [
+  "results": [
     {
-      "title": "Reglamento Técnico de Formularios Clínicos y de Enfermería",
-      "scope": "GLOBAL",
-      "section": "Validación de Campos Obligatorios y Rangos Fisiológicos",
-      "content": "Todo formulario clínico o registro de enfermería debe incluir identificación del profesional, fecha/hora en formato ISO (AAAA-MM-DD HH:MM) y valores dentro de rangos clínicos válidos antes de su radicación.",
-      "score": 0.94
-    },
-    {
-      "title": "Manual Operativo de Cargue de Formatos",
+      "title": "Manual Corporativo de Compras y Aprobaciones",
       "scope": "ACCOUNT",
-      "section": "Reglas de Estructura CSV / Web",
-      "content": "El error CE_CAMPO_006_INVAL se presenta cuando el campo numérico de signos vitales contiene unidades de texto o valores fuera de la tabla de referencia.",
-      "score": 0.89
+      "section": "Flujo de Aprobación de Órdenes de Compra",
+      "snippet": "Toda orden de compra debe ser registrada por el analista en el portal de compras, validada por el jefe de área hasta 50 SMMLV y aprobada por Gerencia Administrativa si supera dicho umbral.",
+      "score": 0.94
     }
   ]
 }
@@ -107,10 +105,10 @@ El microservicio `back-busqueda` responde con código `200 OK` y la lista de fra
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│   Profesional (Médico / Enfermero / Radicador / Auditor)          │
-│   Envía duda o log sobre un formulario en cualquier formato       │
+│   Cliente / Widget / Integración Backend                          │
+│   Envía {"query": "..."} (+ user, context, logs, extras opcional) │
 └─────────────────────────────────┬─────────────────────────────────┘
-                                  │ POST /api/v1/diagnostic/stream
+                                  │ POST /api/v1/chat/stream
                                   ▼
 ┌───────────────────────────────────────────────────────────────────┐
 │                      back-chat (FastAPI:8000)                     │
@@ -118,19 +116,19 @@ El microservicio `back-busqueda` responde con código `200 OK` y la lista de fra
 │ 1. PIISanitizer + ChatGuardrails:                                 │
 │    Protege datos personales (Ley 1581) y filtra saludos/ataques   │
 │                                                                   │
-│ 2. LogParserOperations (Genérico):                                │
-│    Extrae Fila, Campo/Variable, Código de Error y Fase (CA/CE/CD) │
-│    sin asumir ningún reglamento fijo                              │
+│ 2. LogParserOperations (Condicional):                             │
+│    Solo extrae Fase/Variable/Código si hay logs o error técnico;  │
+│    de lo contrario error_diagnostic = null                        │
 │                                                                   │
 │ 3. BusquedaHttpClient -> back-busqueda (:8001):                   │
-│    Recupera las situaciones, documentos y reglamentos aplicables  │
+│    Envía query + client_id + tenant_id + extras sanitizados       │
 │                                                                   │
 │ 4. PromptBuilder:                                                 │
-│    System Prompt (Rol Asistente Técnico de Formularios)           │
-│    + User Prompt (Metadatos del Formulario + Fragmentos RAG)      │
+│    System Prompt (Asistente Virtual SaaS)                         │
+│    + User Prompt (Contexto opcional + Fragmentos RAG)             │
 │                                                                   │
 │ 5. LLMGatewayClient -> llm-gateway (:8003):                       │
-│    Genera respuesta contextualizada y transmite eventos SSE       │
+│    Genera respuesta contextualizada y emite eventos SSE / JSON    │
 └─────────────────┬─────────────────────────────────┬───────────────┘
                   │                                 │
                   ▼                                 ▼

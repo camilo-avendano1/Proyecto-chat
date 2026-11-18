@@ -35,7 +35,7 @@ def test_guardrails_greetings_fast_path():
         assert result.is_intercepted is True, f"Failed to intercept greeting: {g}"
         assert result.status == "FAST_RESPONSE_GREETING"
         assert result.direct_response is not None
-        assert "Asistente Técnico" in result.direct_response or "formularios" in result.direct_response.lower() or "Plataforma" in result.direct_response
+        assert "Asistente Virtual" in result.direct_response or "plataforma" in result.direct_response.lower()
 
 
 def test_guardrails_prompt_injection_blocked():
@@ -69,7 +69,20 @@ def test_guardrails_out_of_domain_redirected():
         result = ChatGuardrails.evaluate(query=query, system_logs=None)
         assert result.is_intercepted is True, f"Failed to intercept out of domain: {query}"
         assert result.status == "OUT_OF_DOMAIN"
-        assert "especializada exclusivamente en el diagnóstico técnico" in result.direct_response
+        assert "Asistente Virtual" in result.direct_response
+        assert "temas ajenos" in result.direct_response
+
+
+def test_guardrails_corporate_general_queries_pass():
+    """Verify general corporate/SaaS operational queries pass guardrails."""
+    corporate_queries = [
+        "¿Cómo se aprueba una orden de compra?",
+        "¿Cuál es la política de devoluciones?",
+    ]
+    for query in corporate_queries:
+        result = ChatGuardrails.evaluate(query=query, system_logs=None, client_name="Entidad Corporativa Externa")
+        assert result.is_intercepted is False
+        assert result.status == "PASS"
 
 
 def test_guardrails_technical_queries_pass():

@@ -44,7 +44,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
 
   // Login Form State
   const [loginUsername, setLoginUsername] = useState('superadmin');
-  const [loginPassword, setLoginPassword] = useState('AdminSuperSecret2025!');
+  const [loginPassword, setLoginPassword] = useState('AdminPassword2026!');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -68,10 +68,11 @@ export default function ObservabilityModal({ activeTab, onClose }) {
     setIsLoggingIn(true);
     try {
       const data = await adminLogin({ username: loginUsername, password: loginPassword });
+      const userObj = data.user || { username: data.username, role: data.role, client_id: data.client_id };
       setAdminToken(data.access_token);
-      setAdminUser(data.user);
+      setAdminUser(userObj);
       sessionStorage.setItem('saas_admin_token', data.access_token);
-      sessionStorage.setItem('saas_admin_user', JSON.stringify(data.user));
+      sessionStorage.setItem('saas_admin_user', JSON.stringify(userObj));
     } catch (err) {
       setLoginError(err.message || 'Error al autenticar administrador');
     } finally {
@@ -237,7 +238,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                   style={{ fontSize: '0.74rem', padding: '3px 8px' }}
                   onClick={() => {
                     setLoginUsername('superadmin');
-                    setLoginPassword('AdminSuperSecret2025!');
+                    setLoginPassword('AdminPassword2026!');
                   }}
                 >
                   Preset: Superadmin
@@ -603,7 +604,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                           </td>
                           <td>{log.usuario}</td>
                           <td style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                            {log.client_id || 'sigires'} / {log.tenant_id ? log.tenant_id.slice(0, 8) : 'default'}
+                            {log.client_id || 'default'} / {log.tenant_id ? log.tenant_id.slice(0, 8) : 'default'}
                           </td>
                           <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={JSON.stringify(log.details)}>
                             {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}

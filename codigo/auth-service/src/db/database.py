@@ -59,15 +59,14 @@ class TenantORM(Base):
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
-    def is_origin_allowed(self, origin: str) -> bool:
+    def is_origin_allowed(self, origin: Optional[str]) -> bool:
+        allowed_list = [(d or "").rstrip("/") for d in (self.dominios_permitidos or [])]
+        if "*" in allowed_list:
+            return True
         if not origin:
             return False
         clean_origin = origin.rstrip("/")
-        for allowed in self.dominios_permitidos or []:
-            clean_allowed = allowed.rstrip("/")
-            if clean_allowed == "*" or clean_origin == clean_allowed:
-                return True
-        return False
+        return any(clean_origin == allowed for allowed in allowed_list if allowed)
 
 
 class AdminUserORM(Base):

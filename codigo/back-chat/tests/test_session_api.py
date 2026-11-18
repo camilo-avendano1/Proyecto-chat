@@ -89,3 +89,63 @@ def test_create_session_unauthorized_origin(client: TestClient, valid_widget_key
     response = client.post("/api/v1/widget/session", headers=headers, json=payload)
     assert response.status_code == 403
     assert "no está autorizado en la lista blanca" in response.json()["detail"]
+
+
+def test_create_session_minimal_body_with_origin_header(client: TestClient, valid_widget_key: str):
+    headers = {
+        "X-Widget-Key": valid_widget_key,
+        "Origin": "https://sigires.procex.co",
+        "Content-Type": "application/json",
+    }
+    response = client.post("/api/v1/widget/session", headers=headers, json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["client_id"] == "sigires"
+    assert len(data["session_token"]) > 30
+
+
+def test_create_session_wildcard_without_origin(client: TestClient):
+    headers = {
+        "X-Widget-Key": "pk_live_otraempresa_1a2b3c4d5e6f7a8b",
+        "Content-Type": "application/json",
+    }
+    response = client.post("/api/v1/widget/session", headers=headers, json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["client_id"] == "otra_empresa"
+    assert "Entidad Corporativa Externa" in data["client_name"]
+
+
+def test_create_session_with_generic_metadata(client: TestClient):
+    from src.infrastructure.security.jwt_handler import default_jwt_handler
+
+    headers = {
+        "X-Widget-Key": "pk_live_otraempresa_1a2b3c4d5e6f7a8b",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "metadata": {
+            "canal": "portal_erp",
+            "pais": "CO",
+            "invalid$key": "should_be_dropped",
+            "nested": {"no": "scalars_only"},
+        }
+    }
+    response = client.post("/api/v1/widget/session", headers=headers, json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    decoded = default_jwt_handler.decode_token(data["session_token"])
+    assert decoded["metadata"] == {"canal": "portal_erp", "pais": "CO"}
+
+
+def test_create_session_restricted_tenant_without_origin_returns_403(
+    client: TestClient,
+    valid_widget_key: str,
+):
+    headers = {
+        "X-Widget-Key": valid_widget_key,
+        "Content-Type": "application/json",
+    }
+    response = client.post("/api/v1/widget/session", headers=headers, json={})
+    assert response.status_code == 403
+    assert "no está autorizado en la lista blanca" in response.json()["detail"]

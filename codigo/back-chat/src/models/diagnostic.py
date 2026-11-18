@@ -1,34 +1,139 @@
 """
-Pydantic schemas for Diagnostic and Chat endpoints.
+Pydantic schemas for Chat and Diagnostic endpoints.
 """
 
-from typing import Optional, List
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from src.models.common import (
-    UIContext,
-    UserContext,
     ChatMessage,
     ErrorDiagnosticModel,
-    SourceItem
+    SourceItem,
+    UIContext,
+    UserContext,
+    UserInfo,
 )
 
 
-class DiagnosticStreamRequest(BaseModel):
-    query: str = Field(..., description="Pregunta en lenguaje natural del usuario")
-    system_logs: Optional[str] = Field(None, description="Trazas o logs de error descargados")
-    ui_context: UIContext = Field(..., description="Contexto de navegación de la pantalla activa")
-    user_context: UserContext = Field(..., description="Contexto del usuario autenticado")
+class ChatRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="Consulta o pregunta en lenguaje natural del usuario")
+    user: Optional[UserInfo] = Field(
+        default=None,
+        description="Información genérica del usuario autenticado en la plataforma cliente",
+    )
+    context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Contexto genérico de la pantalla, flujo o recurso activo",
+    )
+    logs: Optional[str] = Field(
+        default=None,
+        description="Trazas técnicas o logs adjuntos opcionales",
+    )
+    extras: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Metadatos o filtros opcionales específicos del cliente para la búsqueda RAG",
+    )
     conversation_history: Optional[List[ChatMessage]] = Field(
         default_factory=list,
-        description="Historial de mensajes previos en la sesión"
+        description="Historial de mensajes previos en la sesión",
+    )
+    # Alias legados compatibles con integraciones anteriores
+    system_logs: Optional[str] = Field(
+        default=None,
+        description="Alias legado de 'logs' (trazas o logs de error adjuntos)",
+    )
+    ui_context: Optional[UIContext] = Field(
+        default=None,
+        description="Alias legado de 'context' para UI del widget",
+    )
+    user_context: Optional[UserContext] = Field(
+        default=None,
+        description="Alias legado de 'user' para contexto del usuario",
     )
 
+    def get_logs(self) -> Optional[str]:
+        return self.logs or self.system_logs
 
-class DiagnosticQueryResponse(BaseModel):
-    response: str = Field(..., description="Diagnóstico y pasos de solución generados por el asistente")
-    error_diagnostic: Optional[ErrorDiagnosticModel] = Field(None, description="Detalles técnicos del error detectado")
-    sources: List[SourceItem] = Field(default_factory=list, description="Documentos normativos o manuales consultados")
+    def get_usuario(self) -> str:
+        if self.user and self.user.id:
+            return self.user.id
+        if self.user_context and self.user_context.usuario:
+            return self.user_context.usuario
+        return "anonimo"
+
+    def get_role(self) -> Optional[str]:
+        if self.user and self.user.role:
+            return self.user.role
+        if self.user_context and self.user_context.permisos:
+            return self.user_context.permisos
+        return None
+
+    def get_org_code(self) -> Optional[str]:
+        if self.user and self.user.organization:
+            return self.user.organization
+        if self.user_context and self.user_context.ips_code:
+            return self.user_context.ips_code
+        return None
+
+    def get_context_dict(self) -> Dict[str, Any]:
+        merged: Dict[str, Any] = {}
+        if self.ui_context is not None:
+            for key, value in self.ui_context.model_dump(exclude_none=True).items():
+                if value is not None:
+                    merged[key] = value
+            if self.ui_context.model_extra:
+                for key, value in self.ui_context.model_extra.items():
+                    if value is not None:
+                        merged[key] = value
+        if self.context:
+            for key, value in self.context.items():
+                if value is not None:
+                    merged[key] = value
+        return merged
+
+    def get_user_attributes(self) -> Dict[str, Any]:
+        attrs: Dict[str, Any] = {}
+        if self.user_context is not None:
+            for key in ("filial", "eps", "ips_code", "ips_nombre"):
+                value = getattr(self.user_context, key, None)
+                if value is not None:
+                    attrs[key] = value
+            if self.user_context.model_extra:
+                for key, value in self.user_context.model_extra.items():
+                    if value is not None:
+                        attrs[key] = value
+        if self.user is not None:
+            if self.user.organization is not None:
+                attrs["organization"] = self.user.organization
+            if self.user.attributes:
+                for key, value in self.user.attributes.items():
+                    if value is not None:
+                        attrs[key] = value
+            if self.user.model_extra:
+                for key, value in self.user.model_extra.items():
+                    if value is not None:
+                        attrs[key] = value
+        return attrs
+
+    def get_formato_archivo(self) -> Optional[str]:
+        ctx = self.get_context_dict()
+        value = ctx.get("formato_archivo") or ctx.get("file_format")
+        return str(value) if value is not None else None
+
+
+DiagnosticStreamRequest = ChatRequest
+
+
+class ChatQueryResponse(BaseModel):
+    response: str = Field(..., description="Respuesta o diagnóstico generado por el asistente")
+    error_diagnostic: Optional[ErrorDiagnosticModel] = Field(
+        None,
+        description="Detalles técnicos del error detectado (null si no aplica)",
+    )
+    sources: List[SourceItem] = Field(default_factory=list, description="Documentos o manuales consultados")
+
+
+DiagnosticQueryResponse = ChatQueryResponse
 
 
 class StatusResponse(BaseModel):
@@ -58,7 +163,7 @@ class UsageSummaryResponse(BaseModel):
 class UserUsageResponse(BaseModel):
     usuario: str
     tenant_id: str
-    client_id: Optional[str] = "sigires"
+    client_id: Optional[str] = "default"
     total_requests: int
     llm_requests: int
     fast_path_requests: int
@@ -70,7 +175,7 @@ class UserUsageResponse(BaseModel):
 
 class TenantUsageResponse(BaseModel):
     tenant_id: str
-    client_id: Optional[str] = "sigires"
+    client_id: Optional[str] = "default"
     total_requests: int
     llm_requests: int
     fast_path_requests: int

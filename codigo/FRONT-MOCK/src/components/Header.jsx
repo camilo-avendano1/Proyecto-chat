@@ -32,7 +32,7 @@ export default function Header({
             <span className="brand-badge">Front Mock</span>
           </h1>
           <div className="brand-subtitle">
-            Asistente Técnico de Formularios, Formatos y Reglamentos • RAG Multi-Cliente
+            Asistente Virtual SaaS • RAG Multi-Cliente
           </div>
         </div>
       </div>

@@ -4,7 +4,8 @@ Valida la API Key pública del tenant, la lista blanca de dominios y emite el JW
 """
 
 from dataclasses import dataclass
-from typing import Optional
+import re
+from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,6 +15,26 @@ from src.core.audit import audit_logger
 from src.core.exceptions import AuthenticationError, ForbiddenError
 from src.core.security import api_key_preview, hash_api_key, issue_widget_token
 from src.db.database import ClientORM, TenantORM
+
+_METADATA_KEY_RE = re.compile(r"^[a-zA-Z0-9_.-]{1,64}\Z")
+_MAX_METADATA_KEYS = 20
+_MAX_METADATA_STR_LEN = 200
+
+
+def _sanitize_metadata(metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Valida y normaliza metadatos de sesión (máx. 20 claves válidas y valores escalares)."""
+    if not metadata or not isinstance(metadata, dict):
+        return {}
+    sanitized: Dict[str, Any] = {}
+    for key, value in metadata.items():
+        if len(sanitized) >= _MAX_METADATA_KEYS:
+            break
+        if not isinstance(key, str) or not _METADATA_KEY_RE.match(key):
+            continue
+        if value is None or not isinstance(value, (str, int, float, bool)):
+            continue
+        sanitized[key] = value[:_MAX_METADATA_STR_LEN] if isinstance(value, str) else value
+    return sanitized
 
 
 @dataclass
@@ -33,15 +54,21 @@ class WidgetSessionService:
     def create_session(
         self,
         api_key: str,
-        origin: str,
-        eps_id: str,
-        ips_code: str,
-        client_id: Optional[str] = "sigires",
+        origin: Optional[str] = None,
+        client_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        eps_id: Optional[str] = None,
+        ips_code: Optional[str] = None,
         ip_address: Optional[str] = None,
     ) -> WidgetSession:
+        effective_origin = origin or ""
+
         if not api_key:
             audit_logger.log_auth_failure(
-                reason="MISSING_X_WIDGET_KEY", origin=origin, ip_address=ip_address, client_id=client_id or "unknown"
+                reason="MISSING_X_WIDGET_KEY",
+                origin=effective_origin,
+                ip_address=ip_address,
+                client_id=client_id or "unknown",
             )
             raise AuthenticationError("Falta la cabecera obligatoria X-Widget-Key.")
 
@@ -49,7 +76,7 @@ class WidgetSessionService:
         if not tenant or tenant.status != "ACTIVE":
             audit_logger.log_auth_failure(
                 reason="INVALID_OR_REVOKED_API_KEY",
-                origin=origin,
+                origin=effective_origin,
                 api_key_preview=api_key_preview(api_key),
                 ip_address=ip_address,
                 client_id=client_id or "unknown",
@@ -60,27 +87,33 @@ class WidgetSessionService:
         if not client or client.status != "ACTIVE":
             audit_logger.log_auth_failure(
                 reason="CLIENT_INACTIVE",
-                origin=origin,
+                origin=effective_origin,
                 ip_address=ip_address,
                 client_id=tenant.client_id,
                 tenant_id=tenant.tenant_id,
             )
             raise AuthenticationError("La empresa cliente asociada no está activa.")
 
-        if not tenant.is_origin_allowed(origin):
+        if not tenant.is_origin_allowed(effective_origin):
             audit_logger.log_security_event(
                 event_type="UNAUTHORIZED_ORIGIN",
                 severity="HIGH",
                 client_id=client.client_id,
                 tenant_id=tenant.tenant_id,
                 usuario="anonymous",
-                details={"origin": origin, "tenant_name": tenant.nombre, "allowed": tenant.dominios_permitidos},
+                details={"origin": effective_origin, "tenant_name": tenant.nombre, "allowed": tenant.dominios_permitidos},
                 ips_code=ips_code,
                 ip_address=ip_address,
             )
             raise ForbiddenError(
-                f"El dominio de origen '{origin}' no está autorizado en la lista blanca de '{tenant.nombre}'."
+                f"El dominio de origen '{effective_origin}' no está autorizado en la lista blanca de '{tenant.nombre}'."
             )
+
+        merged_metadata = _sanitize_metadata(metadata)
+        if eps_id and "eps_id" not in merged_metadata:
+            merged_metadata["eps_id"] = str(eps_id)[:_MAX_METADATA_STR_LEN]
+        if ips_code and "ips_code" not in merged_metadata:
+            merged_metadata["ips_code"] = str(ips_code)[:_MAX_METADATA_STR_LEN]
 
         expires = settings.SESSION_EXPIRES_SECONDS
         token = issue_widget_token(
@@ -91,9 +124,10 @@ class WidgetSessionService:
                 "busqueda_api_url": client.busqueda_api_url,
                 "tenant_id": tenant.tenant_id,
                 "tenant_name": tenant.nombre,
+                "metadata": merged_metadata,
                 "eps_id": eps_id,
                 "ips_code": ips_code,
-                "origin": origin,
+                "origin": effective_origin,
             },
             expires_seconds=expires,
         )
@@ -104,7 +138,7 @@ class WidgetSessionService:
             client_id=client.client_id,
             tenant_id=tenant.tenant_id,
             usuario="widget",
-            details={"origin": origin, "eps_id": eps_id},
+            details={"origin": effective_origin, "eps_id": eps_id, "has_metadata": bool(merged_metadata)},
             ips_code=ips_code,
             ip_address=ip_address,
         )

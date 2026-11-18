@@ -101,13 +101,12 @@ BUILTIN_KNOWLEDGE_BANK = [
 ]
 
 DEFAULT_FALLBACK_SOURCE = {
-    "title": "Guía General de Validación de Formularios y Reglamentos Técnicos",
+    "title": "Base de Conocimiento General (Modo Contingencia)",
     "scope": KnowledgeScope.GLOBAL,
-    "section": "Reglas Generales de Diligenciamiento y Cargue de Formatos",
+    "section": "Orientación General",
     "snippet": (
-        "Verifique que cada campo del formulario o archivo cumpla con el tipo de dato, "
-        "catálogo de valores permitidos, formato de fecha y reglas de coherencia cruzada "
-        "establecidos en el reglamento técnico correspondiente al formato que está subiendo."
+        "El servicio de búsqueda documental del cliente no se encuentra disponible temporalmente. "
+        "La respuesta se basa únicamente en el contexto proporcionado en la consulta."
     ),
 }
 
@@ -116,7 +115,7 @@ class BusquedaHttpClient(SearchServiceProtocol):
     """
     HTTP client for querying the Back - Busqueda retrieval microservice.
     If the service is unavailable or in local fallback mode, leverages
-    the built-in Colombian Healthcare Knowledge Bank.
+    the built-in contingency knowledge bank.
     """
 
     def __init__(
@@ -132,12 +131,13 @@ class BusquedaHttpClient(SearchServiceProtocol):
     async def search(
         self,
         query: str,
-        client_id: Optional[str] = "sigires",
+        client_id: Optional[str] = None,
         busqueda_api_url: Optional[str] = None,
         tenant_id: Optional[str] = None,
         category: Optional[str] = None,
         variable_num: Optional[int] = None,
         error_code: Optional[str] = None,
+        extras: Optional[Dict[str, Any]] = None,
         top_k: int = 5,
     ) -> List[KnowledgeSource]:
         """
@@ -147,10 +147,21 @@ class BusquedaHttpClient(SearchServiceProtocol):
         sources = []
 
         # Determine target search API URL for this client
-        target_url = busqueda_api_url or settings.CLIENT_BUSQUEDA_URLS.get(
-            client_id or "sigires", self.base_url
+        target_url = (
+            busqueda_api_url
+            or settings.CLIENT_BUSQUEDA_URLS.get(client_id or "default")
+            or settings.CLIENT_BUSQUEDA_URLS.get("default")
+            or self.base_url
         )
         target_url = target_url.rstrip("/")
+
+        merged_extras: Dict[str, Any] = dict(extras or {})
+        if category is not None:
+            merged_extras.setdefault("category", category)
+        if variable_num is not None:
+            merged_extras.setdefault("variable_number", variable_num)
+        if error_code is not None:
+            merged_extras.setdefault("error_code", error_code)
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -160,11 +171,7 @@ class BusquedaHttpClient(SearchServiceProtocol):
                     "client_id": client_id,
                     "tenant_id": tenant_id,
                     "top_k": top_k,
-                    "extras": sanitize_extras({
-                        "category": category,
-                        "variable_number": variable_num,
-                        "error_code": error_code,
-                    }),
+                    "extras": sanitize_extras(merged_extras),
                 }
                 headers = {
                     "X-Internal-Key": settings.BUSQUEDA_SERVICE_KEY,
@@ -179,10 +186,15 @@ class BusquedaHttpClient(SearchServiceProtocol):
                     data = response.json()
                     raw_chunks = data.get("chunks", data.get("results", []))
                     for item in raw_chunks:
+                        raw_scope = str(item.get("scope") or "GLOBAL").upper()
+                        try:
+                            parsed_scope = KnowledgeScope(raw_scope)
+                        except ValueError:
+                            parsed_scope = KnowledgeScope.GLOBAL
                         sources.append(
                             KnowledgeSource(
-                                document_title=item.get("title", item.get("document_title", "Documento Normativo")),
-                                scope=KnowledgeScope(item.get("scope", "GLOBAL")),
+                                document_title=item.get("title", item.get("document_title", "Documento de Referencia")),
+                                scope=parsed_scope,
                                 section=item.get("section", "General"),
                                 score=item.get("score", 1.0),
                                 snippet=item.get("content", item.get("snippet", "")),

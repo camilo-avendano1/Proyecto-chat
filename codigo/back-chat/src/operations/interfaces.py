@@ -14,12 +14,13 @@ class SearchServiceProtocol(Protocol):
     async def search(
         self,
         query: str,
-        client_id: Optional[str] = "sigires",
+        client_id: Optional[str] = None,
         busqueda_api_url: Optional[str] = None,
         tenant_id: Optional[str] = None,
         category: Optional[str] = None,
         variable_num: Optional[int] = None,
         error_code: Optional[str] = None,
+        extras: Optional[Dict[str, Any]] = None,
         top_k: int = 5,
     ) -> List[KnowledgeSource]:
         """Queries the retrieval engine for relevant normative and manual chunks."""
@@ -125,12 +126,13 @@ class SearchServiceStub:
     async def search(
         self,
         query: str,
-        client_id: Optional[str] = "sigires",
+        client_id: Optional[str] = None,
         busqueda_api_url: Optional[str] = None,
         tenant_id: Optional[str] = None,
         category: Optional[str] = None,
         variable_num: Optional[int] = None,
         error_code: Optional[str] = None,
+        extras: Optional[Dict[str, Any]] = None,
         top_k: int = 5,
     ) -> List[KnowledgeSource]:
         self.call_history.append({
@@ -141,6 +143,7 @@ class SearchServiceStub:
             "category": category,
             "variable_num": variable_num,
             "error_code": error_code,
+            "extras": extras,
             "top_k": top_k,
         })
         if self.predefined_sources:

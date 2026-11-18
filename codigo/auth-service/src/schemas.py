@@ -3,17 +3,19 @@ Esquemas Pydantic v2 (Request/Response) del Auth Service.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------- Widget
 class SessionCreateRequest(BaseModel):
-    client_id: Optional[str] = Field("sigires", description="Identificador de la empresa cliente")
-    origin: str = Field(..., description="Dominio de origen de la solicitud")
-    eps_id: str = Field(..., description="Identificador de la EPS / división")
-    ips_code: str = Field(..., description="Código de habilitación de la IPS")
+    origin: Optional[str] = Field(None, description="Dominio de origen (opcional si se envía en cabecera HTTP Origin)")
+    client_id: Optional[str] = Field(None, description="Identificador opcional del cliente; se resuelve desde X-Widget-Key")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Metadatos opcionales propios del cliente (sucursal, división, departamento, etc.)")
+    # Campos opcionales de compatibilidad (clientes heredados como SIGIRES)
+    eps_id: Optional[str] = Field(None, description="Opcional (compatibilidad): identificador de división/EPS")
+    ips_code: Optional[str] = Field(None, description="Opcional (compatibilidad): código de sede/IPS")
 
 
 class SessionResponse(BaseModel):

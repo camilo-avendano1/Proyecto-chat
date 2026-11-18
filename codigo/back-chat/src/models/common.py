@@ -1,38 +1,54 @@
 """
-Shared Pydantic models for context, error diagnostics, and sources.
-Follows formal contract defined in especificacion-api-integracion-widget.md.
+Shared Pydantic models for context, user info, error diagnostics, and sources.
+Supports both generic multi-client payloads and legacy UIContext/UserContext contracts.
 """
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class UserInfo(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    id: Optional[str] = Field(default=None, description="Identificador del usuario en la plataforma cliente")
+    role: Optional[str] = Field(default=None, description="Rol o perfil del usuario")
+    organization: Optional[str] = Field(
+        default=None,
+        description="Organización, sede, sucursal o división del usuario",
+    )
+    attributes: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Atributos adicionales opcionales del usuario específicos del cliente",
+    )
 
 
 class UIContext(BaseModel):
-    url: str = Field(..., description="URL de la pantalla o formulario activo en la plataforma cliente")
-    pagina_actual: str = Field(..., description="Identificador de la vista o formulario activo")
-    modulo: str = Field(..., description="Módulo del sistema (ej. CARGA_ARCHIVOS, FORMULARIOS_CLINICOS, INFORMES)")
-    active_button_id: Optional[str] = Field(None, description="ID del botón o acción activa")
-    field_in_focus: Optional[str] = Field(None, description="Campo o variable en el que se encuentra el usuario")
+    model_config = ConfigDict(extra="allow")
+
+    url: Optional[str] = Field(default=None, description="URL de la pantalla o vista activa en la plataforma cliente")
+    pagina_actual: Optional[str] = Field(default=None, description="Identificador de la vista o pantalla activa")
+    modulo: Optional[str] = Field(default=None, description="Módulo o sección del sistema cliente")
+    active_button_id: Optional[str] = Field(default=None, description="ID del botón o acción activa")
+    field_in_focus: Optional[str] = Field(default=None, description="Campo o variable en el que se encuentra el usuario")
     estado_cargue_actual: Optional[str] = Field(
-        "NO_APLICA",
-        description="Estado de validación/cargue: EXITOSO, CON_ERRORES, RECHAZADO, NO_APLICA"
+        default=None,
+        description="Estado opcional de validación o proceso actual (ej. EXITOSO, CON_ERRORES, RECHAZADO)",
     )
     formato_archivo: Optional[str] = Field(
-        None,
-        description="Formato del formulario o archivo a validar (ej. CSV, TXT, XML, JSON, ZIP, FORMULARIO_WEB)"
+        default=None,
+        description="Formato opcional del recurso o archivo (ej. CSV, TXT, XML, JSON, ZIP)",
     )
 
 
 class UserContext(BaseModel):
-    usuario: str = Field(..., description="Identificador del profesional o usuario autenticado (médico, enfermero, radicador, auditor)")
-    filial: Optional[str] = Field(None, description="Sede, regional o división operativa")
-    eps: str = Field(..., description="Identificador de la entidad aseguradora o división cliente")
-    ips_code: str = Field(..., description="Código de habilitación o identificador de la institución prestadora")
-    ips_nombre: Optional[str] = Field(None, description="Nombre o razón social de la institución")
-    permisos: Optional[str] = Field(
-        "PERFIL_IPS_RADICADOR",
-        description="Rol del usuario: PERFIL_IPS_MEDICO, PERFIL_IPS_ENFERMERO, PERFIL_IPS_RADICADOR, PERFIL_EPS_AUDITOR, etc."
-    )
+    model_config = ConfigDict(extra="allow")
+
+    usuario: Optional[str] = Field(default=None, description="Identificador del usuario autenticado")
+    filial: Optional[str] = Field(default=None, description="Sede, regional o división operativa")
+    eps: Optional[str] = Field(default=None, description="Identificador de la división o entidad asociada")
+    ips_code: Optional[str] = Field(default=None, description="Código de sede, sucursal u organización")
+    ips_nombre: Optional[str] = Field(default=None, description="Nombre o razón social de la sede o institución")
+    permisos: Optional[str] = Field(default=None, description="Rol o perfil de permisos del usuario")
 
 
 class ChatMessage(BaseModel):
@@ -42,7 +58,7 @@ class ChatMessage(BaseModel):
 
 class ErrorDiagnosticModel(BaseModel):
     detected_code: str = Field(..., description="Código de error técnico detectado en el log o consulta")
-    error_phase: str = Field(..., description="Fase de validación: FASE_1_CA (Archivo/Formato), FASE_2_CE (Estructura/Campos), FASE_3_CD (Datos/Coherencia)")
+    error_phase: str = Field(..., description="Fase técnica detectada en el log o validación")
     affected_variable_number: Optional[int] = Field(None, description="Número de campo, columna o variable afectada")
     affected_variable_name: Optional[str] = Field(None, description="Nombre del campo o variable afectada (si se identifica en el log o contexto)")
     affected_row: Optional[int] = Field(None, description="Fila o número de registro donde ocurrió la inconsistencia")
@@ -51,6 +67,6 @@ class ErrorDiagnosticModel(BaseModel):
 
 
 class SourceItem(BaseModel):
-    document_title: str = Field(..., description="Título del documento, reglamento o manual recuperado por la búsqueda")
+    document_title: str = Field(..., description="Título del documento, política, guía o manual recuperado por la búsqueda")
     scope: str = Field(..., description="Alcance del documento: GLOBAL, ACCOUNT, TENANT")
-    section: str = Field(..., description="Sección, capítulo o anexo específico")
+    section: str = Field(..., description="Sección, capítulo o apartado específico")

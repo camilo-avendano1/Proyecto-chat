@@ -50,22 +50,49 @@ class LogParserOperations:
         re.IGNORECASE,
     )
 
+    EXPLICIT_DIAGNOSTIC_KEYWORDS = (
+        "fase 1",
+        "fase 2",
+        "fase 3",
+        "calidad de archivo",
+        "calidad de estructura",
+        "calidad de datos",
+        "delimitador",
+        "pipeline",
+        "piping",
+        "cruce logico",
+        "cruce lógico",
+        "ca_",
+        "ce_",
+        "cd_",
+    )
+
     @classmethod
     def parse_log_or_query(
         cls,
         system_logs: Optional[str],
         query: str,
         formato_archivo: Optional[str] = None,
-    ) -> ErrorDiagnostic:
+    ) -> Optional[ErrorDiagnostic]:
         """
-        Extracts row, column/field number, explicitly mentioned field name, validation phase, and error code.
-        Combines system_logs and query to provide clean search metadata for back-busqueda.
+        Extracts row, column/field number, explicitly mentioned field name, validation phase, and error code
+        ONLY when explicit diagnostic signals exist in logs or query.
+        Returns None for general/conversational queries so no artificial error code is synthesized.
         """
+        has_logs = bool(system_logs and system_logs.strip())
         combined_text = f"{system_logs or ''} {query}".strip()
+        combined_lower = combined_text.lower()
+
+        row_match = cls.ROW_REGEX.search(combined_text)
+        col_match = cls.COL_REGEX.search(combined_text)
+        code_match = cls.CODE_REGEX.search(combined_text)
+        has_keyword = any(kw in combined_lower for kw in cls.EXPLICIT_DIAGNOSTIC_KEYWORDS)
+
+        if not (has_logs or row_match or col_match or code_match or has_keyword):
+            return None
 
         # 1. Extract Row / Record number
         affected_row = None
-        row_match = cls.ROW_REGEX.search(combined_text)
         if row_match:
             try:
                 affected_row = int(row_match.group(1))
@@ -74,7 +101,6 @@ class LogParserOperations:
 
         # 2. Extract Column / Variable / Field number
         var_num = None
-        col_match = cls.COL_REGEX.search(combined_text)
         if col_match:
             try:
                 var_num = int(col_match.group(1))
@@ -88,7 +114,6 @@ class LogParserOperations:
         var_name = cls._extract_explicit_field_name(combined_text)
 
         # 5. Detect explicit Error Code or synthesize a generic one
-        code_match = cls.CODE_REGEX.search(combined_text)
         if code_match:
             detected_code = code_match.group(1)
         else:

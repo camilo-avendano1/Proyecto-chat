@@ -50,17 +50,19 @@ class Tenant:
     codigo_eps: str
     dominios_permitidos: List[str]
     api_key_hash: str
-    client_id: str = "sigires"
+    client_id: str = "default"
     status: str = "ACTIVE"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    def is_origin_allowed(self, origin: str) -> bool:
+    def is_origin_allowed(self, origin: Optional[str]) -> bool:
+        if any(allowed.rstrip("/") == "*" for allowed in self.dominios_permitidos):
+            return True
         if not origin:
             return False
         clean_origin = origin.rstrip("/")
         for allowed in self.dominios_permitidos:
             clean_allowed = allowed.rstrip("/")
-            if clean_origin == clean_allowed or clean_allowed == "*":
+            if clean_origin == clean_allowed:
                 return True
         return False
 
@@ -74,11 +76,12 @@ class WidgetSession:
     session_token: str
     tenant_id: str
     tenant_name: str
-    eps_id: str
-    ips_code: str
-    client_id: str = "sigires"
-    client_name: str = "SIGIRES (Procex Software S.A.S)"
+    eps_id: Optional[str] = None
+    ips_code: Optional[str] = None
+    client_id: str = "default"
+    client_name: str = "Plataforma SaaS"
     busqueda_api_url: str = "http://localhost:8001"
+    metadata: Dict[str, Any] = field(default_factory=dict)
     expires_in_seconds: int = 1800
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -130,7 +133,7 @@ class UsageLedgerRecord:
     tokens_output: int
     costo_usd: float
     latencia_ms: int
-    client_id: str = "sigires"
+    client_id: str = "default"
     usuario: str = "anonimo"
     status: str = "COMPLETED"
     is_llm_call: bool = True

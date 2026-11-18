@@ -90,3 +90,113 @@ def test_internal_usage_events_record(client: TestClient, internal_headers: dict
     res = client.post("/internal/v1/usage/events", headers=internal_headers, json=payload)
     assert res.status_code == 201
     assert res.json()["status"] == "recorded"
+
+
+def test_internal_chat_minimal_generic_caller(client: TestClient, internal_headers: dict):
+    payload = {
+        "system_prompt": "Eres el Asistente Virtual de Otra Empresa.",
+        "user_prompt": "¿Cómo se aprueba una orden de compra?",
+        "stream": False,
+        "caller": {
+            "client_id": "otra_empresa",
+            "tenant_id": "t1",
+        },
+    }
+    res = client.post("/internal/v1/chat", headers=internal_headers, json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    text = data["response"]
+    assert text and len(text.strip()) > 0
+    lower = text.lower()
+    assert "orden de compra" in lower or "documentación" in lower or "búsqueda" in lower
+    assert "sigires" not in lower
+    assert "ce_general_val_err" not in lower
+
+
+def test_simulated_response_adaptive_cases():
+    from src.services.engine_client import EngineClient
+    from src.schemas import CallerContext
+    from src.db.models import UsageRecordORM
+
+    caller = CallerContext()
+    assert caller.client_id == "default"
+    assert caller.operacion == "CHAT_QUERY"
+    assert caller.rol is None
+    assert caller.ips_code is None
+    assert UsageRecordORM.client_id.default.arg == "default"
+
+    engine = EngineClient()
+    assert engine._generate_simulated_clinical_response is not None
+
+    # Case 1: Error code + RAG snippet (with and without format, including quoted query before RAG)
+    prompt_case_1 = (
+        "CONTEXTO TÉCNICO:\n"
+        "- Código de Error: ERR-402\n"
+        "- Fase / Categoría de Validación: Estructura CSV\n"
+        "- Campo / Variable / Columna Afectada: fecha_emision\n"
+        "- Formato de Formulario o Archivo: FACTURA_V2\n\n"
+        "CONSULTA DEL USUARIO:\n"
+        '"¿Por qué falla la fecha de emisión?"\n\n'
+        "1. [Manual Técnico] **Guía de Integración** - Fechas:\n"
+        '"La fecha de emisión debe seguir el formato YYYY-MM-DD."\n'
+    )
+    resp_1 = engine._generate_simulated_response(prompt_case_1)
+    assert "ERR-402" in resp_1
+    assert "Estructura CSV" in resp_1
+    assert "fecha_emision" in resp_1
+    assert "FACTURA_V2" in resp_1
+    assert "La fecha de emisión debe seguir el formato YYYY-MM-DD." in resp_1
+    assert "Guía de Integración - Fechas" in resp_1
+
+    prompt_case_1_no_fmt = (
+        "- Código de Error: ERR-500\n"
+        "- Fase / Categoría de Validación: Reglas de Negocio\n"
+        "- Campo / Variable / Columna Afectada: monto_total\n\n"
+        "1. [Normativa] **Manual Contable** - Validaciones:\n"
+        '"El monto total debe ser mayor a cero."\n'
+    )
+    resp_1_no_fmt = engine._generate_simulated_response(prompt_case_1_no_fmt)
+    assert "ERR-500" in resp_1_no_fmt
+    assert "monto_total" in resp_1_no_fmt
+    assert "Manual Contable - Validaciones" in resp_1_no_fmt
+
+    # Case 2: RAG snippet without error code
+    prompt_case_2 = (
+        "CONSULTA DEL USUARIO:\n"
+        '"¿Cómo se aprueba una orden de compra?"\n\n'
+        "DOCUMENTOS RECUPERADOS:\n"
+        "1. [Políticas Internas] **Manual de Compras** - Flujo de Aprobación:\n"
+        '"Las órdenes superiores a 5000 USD requieren firma de la dirección financiera."\n'
+    )
+    resp_2 = engine._generate_simulated_response(prompt_case_2)
+    assert "orden de compra" in resp_2.lower()
+    assert "Manual de Compras - Flujo de Aprobación" in resp_2
+    assert "Las órdenes superiores a 5000 USD requieren firma de la dirección financiera." in resp_2
+    assert "VALIDACION_TECNICA" not in resp_2
+    assert "sigires" not in resp_2.lower()
+
+    # Case 3: Short prompt / alias backwards compatibility
+    resp_3 = engine._generate_simulated_clinical_response(
+        'CONSULTA DEL USUARIO:\n"¿Cuál es el horario de soporte?"'
+    )
+    assert len(resp_3) > 20
+    assert "¿Cuál es el horario de soporte?" in resp_3
+    assert "sigires" not in resp_3.lower()
+
+
+async def test_engine_client_fallback_model_used(monkeypatch):
+    import httpx
+    from src.services.engine_client import EngineClient
+
+    async def _fail_post(*args, **kwargs):
+        raise httpx.ConnectError("mocked offline llm")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", _fail_post)
+    engine = EngineClient(fallback_on_error=True)
+    result = await engine.generate_response(
+        system_prompt="Asistente",
+        user_prompt="¿Cómo funciona el módulo?",
+    )
+    assert result.model_used == "simulated-fallback"
+    assert result.provider_used == "contingency-engine"
+    assert "¿Cómo funciona el módulo?" in result.text

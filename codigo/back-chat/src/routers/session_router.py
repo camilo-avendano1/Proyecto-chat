@@ -4,7 +4,8 @@ Endpoint: POST /api/v1/widget/session
 Supports multi-client identification and division/tenant mapping.
 """
 
-from fastapi import APIRouter, Header, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, Body, Header, HTTPException, Request, status
 
 import httpx
 from src.config import settings
@@ -37,17 +38,24 @@ def get_session_operations() -> SessionOperations:
     description="Valida la API Key pública delegando en auth-service (puerto 8002) con respaldo local."
 )
 async def create_widget_session(
-    body: SessionCreateRequest,
+    request: Request,
+    body: Optional[SessionCreateRequest] = Body(default=None),
     x_widget_key: str = Header(..., alias="X-Widget-Key", description="API Key pública del Tenant o Empresa"),
 ):
+    effective_origin = (body.origin if body and body.origin else None) or request.headers.get("origin") or ""
+
     # 1. Intentar delegar a auth-service si está configurado y no estamos en entorno de testing
     if settings.AUTH_SERVICE_URL and settings.ENVIRONMENT != "testing":
+        fwd_headers = {"X-Widget-Key": x_widget_key, "Content-Type": "application/json"}
+        if effective_origin:
+            fwd_headers["Origin"] = effective_origin
+        fwd_payload = body.model_dump(exclude_none=True) if body else {}
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.post(
                     f"{settings.AUTH_SERVICE_URL.rstrip('/')}/api/v1/widget/session",
-                    headers={"X-Widget-Key": x_widget_key, "Content-Type": "application/json"},
-                    json=body.model_dump(exclude_unset=True),
+                    headers=fwd_headers,
+                    json=fwd_payload,
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -64,10 +72,11 @@ async def create_widget_session(
     try:
         session = _session_ops.create_session(
             api_key=x_widget_key,
-            origin=body.origin,
-            eps_id=body.eps_id,
-            ips_code=body.ips_code,
-            client_id=body.client_id,
+            origin=effective_origin,
+            client_id=body.client_id if body else None,
+            metadata=body.metadata if body else None,
+            eps_id=body.eps_id if body else None,
+            ips_code=body.ips_code if body else None,
         )
         return SessionResponse(
             session_token=session.session_token,

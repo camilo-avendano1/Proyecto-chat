@@ -46,6 +46,7 @@ class HttpLLMClient(LLMServiceProtocol):
         system_prompt: str,
         user_prompt: str,
         history: Optional[List[Dict[str, str]]] = None,
+        **kwargs: Any,
     ) -> str:
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -81,7 +82,7 @@ class HttpLLMClient(LLMServiceProtocol):
                 "Activando motor de inferencia simulado de contingencia."
             )
             if self.fallback_on_error:
-                return self._generate_simulated_clinical_response(user_prompt)
+                return self._generate_simulated_response(user_prompt)
             raise
 
     async def generate_stream(
@@ -89,6 +90,7 @@ class HttpLLMClient(LLMServiceProtocol):
         system_prompt: str,
         user_prompt: str,
         history: Optional[List[Dict[str, str]]] = None,
+        **kwargs: Any,
     ) -> AsyncGenerator[str, None]:
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -141,57 +143,95 @@ class HttpLLMClient(LLMServiceProtocol):
             stream_failed = True
 
         if stream_failed and self.fallback_on_error:
-            simulated_text = self._generate_simulated_clinical_response(user_prompt)
+            simulated_text = self._generate_simulated_response(user_prompt)
             words = simulated_text.split(" ")
             for i, word in enumerate(words):
                 chunk = word + (" " if i < len(words) - 1 else "")
                 yield chunk
                 await asyncio.sleep(0.01)
 
-    def _generate_simulated_clinical_response(self, user_prompt: str) -> str:
+    def _generate_simulated_response(self, user_prompt: str) -> str:
         """
-        Generates a structured technical response based dynamically on the search context
-        and metadata injected in user_prompt when the LLM server is offline.
-        Never hardcodes a specific client case or regulation.
+        Generates an adaptive contingency response when the LLM server is offline:
+        1. Error code present -> 4-section technical diagnosis.
+        2. RAG snippet without error code -> direct answer citing snippet.
+        3. No snippet / short prompt -> neutral contingency response addressing the user's query.
         """
         import re
 
         code_match = re.search(r"-\s*Código de Error:\s*(.+)", user_prompt)
         phase_match = re.search(r"-\s*Fase / Categoría de Validación:\s*(.+)", user_prompt)
         field_match = re.search(r"-\s*Campo / Variable / Columna Afectada:\s*(.+)", user_prompt)
-        format_match = re.search(r"-\s*Formato de Formulario o Archivo:\s*(.+)", user_prompt)
+        format_match = re.search(
+            r"-\s*(?:Formato de Formulario o Archivo|formato_archivo|file_format):\s*(.+)",
+            user_prompt,
+        )
+        query_match = re.search(
+            r'CONSULTA DEL (?:USUARIO|PROFESIONAL):\s*\n\s*"(.+?)"',
+            user_prompt,
+            re.DOTALL,
+        )
 
-        source_header_match = re.search(r"1\.\s*\[[^\]]+\]\s*\*\*(.+?)\*\*\s*-\s*(.+?):", user_prompt)
-        snippet_match = re.search(r'^\s*"(.+?)"\s*$', user_prompt, re.MULTILINE)
+        rag_section = user_prompt.split("### DOCUMENTOS", 1)[1] if "### DOCUMENTOS" in user_prompt else ""
+        source_header_match = re.search(r"1\.\s*\[[^\]]+\]\s*\*\*(.+?)\*\*\s*-\s*(.+?):", rag_section)
+        snippet_match = re.search(r'^\s*"(.+?)"\s*$', rag_section, re.MULTILINE)
 
-        error_code = code_match.group(1).strip() if code_match else "VALIDACION_TECNICA"
-        phase_info = phase_match.group(1).strip() if phase_match else "Validación de Estructura"
-        field_info = field_match.group(1).strip() if field_match else "Campo reportado"
-        formato = format_match.group(1).strip() if format_match else "formulario activo"
+        if code_match:
+            error_code = code_match.group(1).strip()
+            phase_info = phase_match.group(1).strip() if phase_match else "Validación Técnica"
+            field_info = field_match.group(1).strip() if field_match else "Campo reportado"
+            formato = format_match.group(1).strip() if format_match else "recurso activo"
+
+            if source_header_match and snippet_match:
+                doc_title = source_header_match.group(1).strip()
+                doc_section = source_header_match.group(2).strip()
+                rule_snippet = snippet_match.group(1).strip()
+                normative_ref = f"{doc_title} - {doc_section}."
+            else:
+                rule_snippet = (
+                    "El campo o registro reportado debe cumplir con el tipo de dato, catálogo de valores "
+                    "y reglas de validación definidos en la documentación técnica aplicable."
+                )
+                normative_ref = "Documentación técnica y manual de validación recuperado por el buscador."
+
+            return (
+                f"### 1. Diagnóstico:\n"
+                f"Se identificó una inconsistencia (`{error_code}`) en **{phase_info}** asociada a **{field_info}** "
+                f"en `{formato}`.\n\n"
+                f"### 2. Regla Técnica:\n"
+                f"{rule_snippet}\n\n"
+                f"### 3. Pasos de Solución:\n"
+                f"1. Ubique el registro o campo señalado en `{formato}`.\n"
+                f"2. Ajuste el valor conforme a la regla técnica y los lineamientos vigentes.\n"
+                f"3. Verifique la estructura y formato general antes de guardar.\n"
+                f"4. Ejecute nuevamente el proceso o validación en la plataforma.\n\n"
+                f"### 4. Fundamento Normativo:\n"
+                f"{normative_ref}"
+            )
 
         if source_header_match and snippet_match:
+            query_text = query_match.group(1).strip() if query_match else "su consulta"
             doc_title = source_header_match.group(1).strip()
             doc_section = source_header_match.group(2).strip()
             rule_snippet = snippet_match.group(1).strip()
-            normative_ref = f"{doc_title} - {doc_section}."
-        else:
-            rule_snippet = (
-                "El campo o registro reportado debe cumplir con el tipo de dato, catálogo de valores "
-                "y reglas de coherencia definidos en el reglamento técnico del formulario."
+            return (
+                f'De acuerdo con la documentación disponible para "{query_text}":\n\n'
+                f"{rule_snippet}\n\n"
+                f"**Pasos recomendados:**\n"
+                f"1. Verifique los requisitos aplicables en el módulo correspondiente de la plataforma.\n"
+                f"2. Confirme que los datos ingresados cumplan con los lineamientos indicados.\n\n"
+                f"**Fuente:** {doc_title} - {doc_section}."
             )
-            normative_ref = "Reglamento técnico y manual de validación recuperado por el buscador."
 
-        return (
-            f"### 1. Diagnóstico:\n"
-            f"Se identificó una inconsistencia (`{error_code}`) en **{phase_info}** asociada a **{field_info}** "
-            f"en el formato `{formato}`.\n\n"
-            f"### 2. Regla Técnica:\n"
-            f"{rule_snippet}\n\n"
-            f"### 3. Pasos de Solución:\n"
-            f"1. Ubique el registro o campo señalado en su formulario o archivo (`{formato}`).\n"
-            f"2. Ajuste el valor conforme a la regla técnica y catálogo del reglamento vigente.\n"
-            f"3. Verifique la codificación y estructura general del formato antes de guardar.\n"
-            f"4. Vuelva a validar o cargar el formulario en la plataforma.\n\n"
-            f"### 4. Fundamento Normativo:\n"
-            f"{normative_ref}"
+        clean_query = (
+            query_match.group(1).strip()
+            if query_match
+            else (user_prompt.strip().splitlines()[-1][:160] if user_prompt.strip() else "su solicitud")
         )
+        return (
+            f'Respecto a su consulta ("{clean_query}"), el motor de lenguaje opera en modo de '
+            f"contingencia local. Por favor revise la guía operativa o consulte con el área de soporte "
+            f"de la plataforma para validar los detalles específicos aplicables."
+        )
+
+    _generate_simulated_clinical_response = _generate_simulated_response

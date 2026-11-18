@@ -32,15 +32,19 @@ export async function fetchSystemStatus() {
 
 /**
  * Initializes widget session.
+ * Sends a minimal JSON payload (origin + optional client_id, metadata, eps_id, ips_code).
  * Tries Auth Service (:8002) first, falling back to Back Central proxy (:8000).
  */
-export async function createSession({ clientId, origin, epsId, ipsCode, apiKey }) {
+export async function createSession({ origin, apiKey, clientId, metadata, epsId, ipsCode }) {
   const payload = {
-    client_id: clientId,
     origin: origin || window.location.origin,
-    eps_id: epsId,
-    ips_code: ipsCode,
   };
+  if (clientId) payload.client_id = clientId;
+  if (metadata && (typeof metadata !== 'object' || Object.keys(metadata).length > 0)) {
+    payload.metadata = metadata;
+  }
+  if (epsId) payload.eps_id = epsId;
+  if (ipsCode) payload.ips_code = ipsCode;
 
   try {
     const res = await fetch(`${AUTH_SERVICE_URL}/api/v1/widget/session`, {
@@ -76,9 +80,9 @@ export async function createSession({ clientId, origin, epsId, ipsCode, apiKey }
 }
 
 /**
- * Diagnostic in streaming mode using SSE (Server-Sent Events)
+ * Chat in streaming mode using SSE (Server-Sent Events)
  */
-export async function streamDiagnostic({
+export async function streamChat({
   token,
   payload,
   onChunk,
@@ -89,7 +93,7 @@ export async function streamDiagnostic({
   onRawEvent,
 }) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/diagnostic/stream`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -107,6 +111,7 @@ export async function streamDiagnostic({
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+    let currentEvent = 'message';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -116,17 +121,18 @@ export async function streamDiagnostic({
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
 
-      let currentEvent = 'message';
-
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (!line) continue;
+        if (!line) {
+          currentEvent = 'message';
+          continue;
+        }
 
-        if (line.startsWith('event: ')) {
-          currentEvent = line.replace('event: ', '').trim();
-        } else if (line.startsWith('data: ')) {
-          const rawData = line.replace('data: ', '').trim();
-          
+        if (line.startsWith('event:')) {
+          currentEvent = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          const rawData = line.slice(5).trim();
+
           if (onRawEvent) {
             onRawEvent({ event: currentEvent, data: rawData });
           }
@@ -135,7 +141,7 @@ export async function streamDiagnostic({
             const parsed = JSON.parse(rawData);
 
             if (currentEvent === 'chunk' && onChunk) {
-              onChunk(parsed.text || '');
+              onChunk(parsed?.text || '');
             } else if (currentEvent === 'error_diagnostic' && onErrorDiagnostic) {
               onErrorDiagnostic(parsed);
             } else if (currentEvent === 'sources' && onSources) {
@@ -143,7 +149,7 @@ export async function streamDiagnostic({
             } else if (currentEvent === 'done' && onDone) {
               onDone(parsed);
             } else if (currentEvent === 'error' && onError) {
-              onError(parsed.error || 'Error reportado por el servidor');
+              onError(parsed?.error || 'Error reportado por el servidor');
             }
           } catch (e) {
             if (currentEvent === 'chunk' && onChunk) {
@@ -160,10 +166,10 @@ export async function streamDiagnostic({
 }
 
 /**
- * Diagnostic in synchronous mode (returns consolidated JSON)
+ * Chat in synchronous mode (returns consolidated JSON)
  */
-export async function queryDiagnostic({ token, payload }) {
-  const res = await fetch(`${API_BASE_URL}/api/v1/diagnostic/query`, {
+export async function queryChat({ token, payload }) {
+  const res = await fetch(`${API_BASE_URL}/api/v1/chat/query`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -179,6 +185,10 @@ export async function queryDiagnostic({ token, payload }) {
 
   return await res.json();
 }
+
+// Backward-compatibility aliases
+export const streamDiagnostic = streamChat;
+export const queryDiagnostic = queryChat;
 
 /**
  * Administrator Authentication via Auth Service (:8002)

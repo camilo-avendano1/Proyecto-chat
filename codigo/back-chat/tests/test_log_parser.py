@@ -71,3 +71,17 @@ def test_parse_when_no_logs_provided_does_not_hardcode_variable_names():
     assert diagnostic.affected_variable_name is None
     assert diagnostic.error_phase == ErrorPhase.FASE_2_CE
     assert diagnostic.detected_code == "CE_VAR_011_INVAL"
+
+
+def test_parse_general_query_without_error_signals_returns_none():
+    diagnostic = LogParserOperations.parse_log_or_query(
+        system_logs=None,
+        query="¿Cómo se aprueba una orden de compra en la plataforma?",
+    )
+    assert diagnostic is None
+
+    diagnostic_whitespace_logs = LogParserOperations.parse_log_or_query(
+        system_logs="   ",
+        query="¿Cuál es la política de devoluciones?",
+    )
+    assert diagnostic_whitespace_logs is None

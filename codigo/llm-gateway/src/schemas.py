@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field
 
 
 class CallerContext(BaseModel):
-    client_id: str = Field("sigires", description="Identificador de la empresa cliente")
+    client_id: str = Field("default", description="Identificador de la empresa cliente")
     tenant_id: str = Field("unknown", description="Identificador del tenant o filial")
     usuario: str = Field("anonimo", description="Identificador del usuario final o sistema")
-    rol: Optional[str] = Field(None, description="Rol del usuario (PERFIL_IPS_MEDICO, PERFIL_IPS_RADICADOR, etc.)")
-    ips_code: Optional[str] = Field(None, description="Código de habilitación de la IPS")
-    operacion: str = Field("DIAGNOSTIC_QUERY", description="Tipo de operación clínica o asistencial")
+    rol: Optional[str] = Field(None, description="Rol o perfil del usuario en la plataforma cliente")
+    ips_code: Optional[str] = Field(None, description="Identificador opcional de sede, sucursal o unidad del cliente")
+    operacion: str = Field("CHAT_QUERY", description="Tipo de operación ejecutada")
     request_id: Optional[str] = Field(None, description="ID único correlacional de la petición")
     model_requested: Optional[str] = Field(None, description="Modelo específico solicitado opcional")
 
