@@ -1,13 +1,13 @@
 # Guía de Peticiones cURL y Contratos de Integración de API
 
-**Ecosistema:** SaaS Core Chat & Gateway Multi-Cliente en Tiempo Real  
+**Ecosistema:** SaaS Core Chat & Gateway Multi-Organización en Tiempo Real  
 **Equipo de Desarrollo:** Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno  
 **Fecha:** Octubre 2026  
 
 Este documento contiene la colección completa de peticiones `cURL` para tres audiencias técnicas:
-1. **Desarrolladores de APIs de Búsqueda / RAG (`back-busqueda`)**: Contrato agnóstico al cliente que debe implementar cada servicio de búsqueda. **El conocimiento específico de cada negocio, documentos, manuales y reglamentos proviene exclusivamente de `back-busqueda`**, que alimenta dinámicamente al LLM en cada consulta.
-2. **Consumidores del Chat y Widget (Frontends, Clientes Web)**: Flujo genérico de dos pasos (`auth-service` + `back-chat`) diseñado para funcionar con una petición mínima (`-d '{}'` en sesión y `{"query": "..."}` en chat), además de campos enriquecidos opcionales (`user`, `context`, `logs`, `extras`) y compatibilidad retroactiva para clientes legacy como **SIGIRES**.
-3. **Administradores y Observabilidad**: Autenticación administrativa (`SUPERADMIN` / `CLIENT_ADMIN`), creación de usuarios administradores y consulta de métricas y auditoría.
+1. **Desarrolladores de APIs de Búsqueda / RAG (`back-busqueda`)**: Contrato agnóstico a la organización que debe implementar cada servicio de búsqueda. **El conocimiento específico de cada negocio, documentos, manuales y reglamentos proviene exclusivamente de `back-busqueda`** (y de los documentos cargados por organización/sede), que alimenta dinámicamente al LLM en cada consulta.
+2. **Consumidores del Chat y Widget (Frontends, Portales Web)**: Flujo genérico de dos pasos (`auth-service` + `back-chat`) diseñado para funcionar con una petición mínima (`-d '{}'` en sesión y `{"query": "..."}` en chat), además de campos enriquecidos opcionales (`user`, `context`, `logs`, `extras`) y compatibilidad retroactiva para integraciones como **SIGIRES**.
+3. **Administradores y Observabilidad**: Autenticación administrativa (`GLOBAL_ADMIN` / `ORG_ADMIN`), creación de usuarios administradores y consulta de métricas y auditoría.
 
 ---
 
@@ -15,16 +15,17 @@ Este documento contiene la colección completa de peticiones `cURL` para tres au
 
 | Microservicio | Puerto Base | Protocolo / Uso |
 |---|---|---|
-| **`auth-service`** | `http://localhost:8002` | Handshake de widgets (`POST /api/v1/widget/session`) y auth/gestión de administradores (`POST /api/v1/admin/auth/login`, `POST /api/v1/admin/users`). |
-| **`back-chat`** | `http://localhost:8000` | Orquestador de chat multi-cliente (`POST /api/v1/chat/stream`, `POST /api/v1/chat/query`, alias `/api/v1/diagnostic/*`) y proxy de observabilidad. |
-| **`back-busqueda`** | `http://localhost:8001` | Motor de búsqueda semántica / vectorial RAG (específico por cliente). |
-| **`llm-gateway`** | `http://localhost:8003` | Gateway de inferencia LLM y contabilidad de tokens/costos por cliente, tenant, usuario y rol. |
+| **`auth-service`** | `http://localhost:8002` | Handshake de widgets (`POST /api/v1/widget/session`), auth/gestión de administradores y gestión de organizaciones/sedes (`/api/v1/admin/organizations`, `/api/v1/admin/sites`). |
+| **`back-chat`** | `http://localhost:8000` | Orquestador de chat multi-organización (`POST /api/v1/chat/stream`, `POST /api/v1/chat/query`, alias `/api/v1/diagnostic/*`), carga de documentos (`/api/v1/admin/documents`) y proxy de observabilidad. |
+| **`back-busqueda`** | `http://localhost:8001` | Motor de búsqueda semántica / vectorial RAG (específico por organización). |
+| **`llm-gateway`** | `http://localhost:8003` | Gateway de inferencia LLM y contabilidad de tokens/costos por organización, sede, usuario y rol. |
+| **`front-admin`** | `http://localhost:5174` | Consola administrativa (`GLOBAL_ADMIN` / `ORG_ADMIN`) con nomenclatura adaptable (`Sedes`/`Tiendas`/`Talleres`/`IPS`/`Sucursales`), descargas CSV/JSON y carga de documentos. |
 
 ---
 
 # PARTE 1: Para Desarrolladores de APIs de Búsqueda (`back-busqueda`)
 
-Cuando un usuario envía una consulta a `back-chat`, este microservicio sanitiza datos sensibles (PII/PHI) y realiza una llamada HTTP `POST` a la API de búsqueda configurada para ese cliente (por defecto `http://localhost:8001/api/v1/search`).
+Cuando un usuario envía una consulta a `back-chat`, este microservicio sanitiza datos sensibles (PII/PHI) y realiza una llamada HTTP `POST` a la API de búsqueda configurada para esa organización (por defecto `http://localhost:8001/api/v1/search`).
 
 ### 1.1 Contrato del Endpoint que deben implementar
 
@@ -34,9 +35,9 @@ Cuando un usuario envía una consulta a `back-chat`, este microservicio sanitiza
 - **Autenticación:** cabecera `X-Internal-Key` (clave de servicio compartida con `back-chat`)
 - **Timeout esperado por `back-chat`:** 5.0 segundos
 
-El contrato es **agnóstico al cliente**: tiene un núcleo fijo (`query`, `client_id`, `tenant_id`, `top_k`) y un objeto `extras` con metadatos opcionales que **cambian según el cliente**. Cada API de búsqueda usa los `extras` que entiende e **ignora los demás**.
+El contrato es **agnóstico al sector**: tiene un núcleo fijo (`query`, `org_id`, `site_id`, `top_k`) y un objeto `extras` con metadatos opcionales que **cambian según la organización**. Cada API de búsqueda usa los `extras` que entiende e **ignora los demás**.
 
-#### A. Petición Genérica Mínima (Cliente Corporativo `otra_empresa` con `extras: {}`):
+#### A. Petición Genérica Mínima (Organización Corporativa `otra_empresa` con `extras: {}`):
 
 ```bash
 curl -X POST "http://localhost:8001/api/v1/search" \
@@ -45,8 +46,8 @@ curl -X POST "http://localhost:8001/api/v1/search" \
   -H "X-Request-ID: 3f6c2a9e-1b7d-4c55-9a0e-2d8f1e7b4c10" \
   -d '{
     "query": "¿Cómo se aprueba una orden de compra?",
-    "client_id": "otra_empresa",
-    "tenant_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
+    "org_id": "otra_empresa",
+    "site_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
     "top_k": 4,
     "extras": {}
   }'
@@ -54,7 +55,7 @@ curl -X POST "http://localhost:8001/api/v1/search" \
 
 #### B. Petición con `extras` Personalizados de Negocio (`otra_empresa`):
 
-Cuando el cliente envía `extras` en `/api/v1/chat/stream` o `/api/v1/chat/query`, `back-chat` los valida y los reenvía a `back-busqueda`:
+Cuando la integración envía `extras` en `/api/v1/chat/stream` o `/api/v1/chat/query`, `back-chat` los valida y los reenvía a `back-busqueda`:
 
 ```bash
 curl -X POST "http://localhost:8001/api/v1/search" \
@@ -63,8 +64,8 @@ curl -X POST "http://localhost:8001/api/v1/search" \
   -H "X-Request-ID: 7a1b2c3d-4e5f-6789-abcd-0123456789ef" \
   -d '{
     "query": "¿Cuál es el límite de aprobación para compras de tecnología?",
-    "client_id": "otra_empresa",
-    "tenant_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
+    "org_id": "otra_empresa",
+    "site_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
     "top_k": 4,
     "extras": {
       "departamento": "compras",
@@ -74,9 +75,9 @@ curl -X POST "http://localhost:8001/api/v1/search" \
   }'
 ```
 
-#### C. Ejemplo de Cliente Específico (`sigires` con `extras` extraídos de logs de validación):
+#### C. Ejemplo de Sector Específico (`sigires` con `extras` extraídos de logs de validación):
 
-Si un cliente adjunta trazas de error técnicas (`logs`), el parser genérico de `back-chat` enriquece `extras` con pistas como `category`, `variable_number` y `error_code`:
+Si una sede adjunta trazas de error técnicas (`logs`), el parser genérico de `back-chat` enriquece `extras` con pistas como `category`, `variable_number` y `error_code`:
 
 ```bash
 curl -X POST "http://localhost:8001/api/v1/search" \
@@ -85,8 +86,8 @@ curl -X POST "http://localhost:8001/api/v1/search" \
   -H "X-Request-ID: 9c4d8e2f-1a3b-4c5d-8e9f-0a1b2c3d4e5f" \
   -d '{
     "query": "Al subir el formulario de enfermería tengo un error de validación en el campo 6 de signos vitales",
-    "client_id": "sigires",
-    "tenant_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "org_id": "sigires",
+    "site_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
     "top_k": 4,
     "extras": {
       "category": "CALIDAD_ESTRUCTURA_CAMPOS",
@@ -101,10 +102,10 @@ curl -X POST "http://localhost:8001/api/v1/search" \
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
 | `query` | `string` | **Sí** | Pregunta del usuario (ya anonimizada: sin PII/PHI). |
-| `client_id` | `string` | **Sí** | Cliente corporativo (`otra_empresa`, `sigires`, ...). |
-| `tenant_id` | `string` | **Sí** | Tenant/división del cliente. Úselo para aislar los datos. |
+| `org_id` | `string` | **Sí** | Identificador de la organización (`otra_empresa`, `sigires`, ...). |
+| `site_id` | `string` | **Sí** | Identificador de la sede/tienda/taller/IPS. Úselo para aislar los datos. |
 | `top_k` | `integer` | No | Máximo de fragmentos a devolver (por defecto `4`). |
-| `extras` | `object` | No | Metadatos opcionales propios de cada cliente (ver reglas abajo). |
+| `extras` | `object` | No | Metadatos opcionales propios de cada organización (ver reglas abajo). |
 
 #### Reglas de seguridad de `extras`
 
@@ -115,16 +116,16 @@ curl -X POST "http://localhost:8001/api/v1/search" \
 - **Límites:** máximo 20 claves; strings de máximo 500 caracteres.
 - **Uso:** solo como **filtros/boost** de la búsqueda. Nunca concatenarlos en SQL, ni usarlos como nombres de tabla/índice o rutas de archivo; usar consultas parametrizadas.
 - **Claves desconocidas:** ignorarlas (no responder con error).
-- **Aislamiento:** filtrar **siempre** por `client_id` + `tenant_id`; un `extra` nunca debe ampliar el alcance a otro tenant.
+- **Aislamiento:** filtrar **siempre** por `org_id` + `site_id`; un `extra` nunca debe ampliar el alcance a otra sede.
 
 #### Respuestas de error esperadas
 
 | Código | Cuándo |
 |---|---|
 | `401` | Falta `X-Internal-Key` o es inválida. |
-| `422` | Falta `query`/`client_id`/`tenant_id` o `extras` no cumple las reglas. |
+| `422` | Falta `query`/`org_id`/`site_id` o `extras` no cumple las reglas. |
 
-Cualquier error o timeout hace que `back-chat` use su base de conocimiento local de contingencia.
+Cualquier error o timeout hace que `back-chat` use sus documentos locales de contingencia.
 
 ---
 
@@ -137,14 +138,14 @@ Su API de búsqueda debe responder con una lista de fragmentos bajo la clave `re
   "results": [
     {
       "title": "Manual Corporativo de Compras y Aprobaciones",
-      "scope": "ACCOUNT",
+      "scope": "ORGANIZATION",
       "section": "Flujo de Aprobación de Órdenes de Compra",
       "score": 0.94,
       "snippet": "Toda orden de compra debe ser registrada por el analista en el portal de compras, validada por el jefe de área para montos hasta 50 SMMLV y aprobada por Gerencia Administrativa cuando supere dicho umbral."
     },
     {
       "title": "Política de Control Presupuestal",
-      "scope": "TENANT",
+      "scope": "SITE",
       "section": "Validación de Centro de Costos",
       "score": 0.87,
       "snippet": "Antes de aprobar la orden, verifique la disponibilidad presupuestal del centro de costos asignado y adjunte al menos dos cotizaciones vigentes."
@@ -155,7 +156,7 @@ Su API de búsqueda debe responder con una lista de fragmentos bajo la clave `re
 
 #### Campos de cada fragmento retornado:
 - `title` (o `document_title`): Título del documento, guía o manual.
-- `scope`: Alcance del fragmento (`GLOBAL`, `ACCOUNT` o `TENANT`).
+- `scope`: Alcance del fragmento (`GLOBAL`, `ORGANIZATION` o `SITE`).
 - `section`: Capítulo, sección o subtítulo de donde se extrajo.
 - `score`: Puntuación de relevancia semántica (número entre 0.0 y 1.0).
 - `snippet` (o `content`): Texto exacto del fragmento documental que leerá el LLM para responder.
@@ -178,7 +179,7 @@ El consumo de las APIs del chat sigue un flujo genérico de **dos pasos**:
 - **URL:** `http://localhost:8002/api/v1/widget/session` *(también disponible vía proxy en `http://localhost:8000/api/v1/widget/session`)*
 - **Cabeceras:**
   - `Content-Type: application/json`
-  - `X-Widget-Key: <API_KEY_PUBLICA>` (obligatoria; identifica al cliente y tenant)
+  - `X-Widget-Key: <CLAVE_CONEXION_PUBLICA>` (obligatoria; identifica la organización y sede)
   - `Origin: <DOMINIO_DEL_FRONTEND>` (obligatoria si no se envía `origin` en el JSON)
 
 #### A. Handshake Mínimo (Recomendado — body vacío `-d '{}'`):
@@ -204,15 +205,15 @@ curl -X POST "http://localhost:8002/api/v1/widget/session" \
     "origin": "http://localhost:5173",
     "metadata": {
       "division": "compras",
-      "sede": "CORP-01",
+      "sede": "SEDE-CTRL-01",
       "canal": "portal_web"
     }
   }'
 ```
 
-#### C. Ejemplo Cliente SIGIRES (Compatibilidad con `eps_id` / `ips_code`):
+#### C. Ejemplo Organización Salud (`sigires` con `org_id` y `site_code`):
 
-Para integraciones legacy de SIGIRES, los campos opcionales `client_id`, `eps_id` e `ips_code` continúan aceptándose y se incorporan automáticamente a los metadatos de la sesión:
+Opcionalmente puede enviarse `org_id` y `site_code` explícitos para validarlos contra la clave de conexión de la sede (IPS, tienda, taller, sucursal):
 
 ```bash
 curl -X POST "http://localhost:8002/api/v1/widget/session" \
@@ -220,10 +221,9 @@ curl -X POST "http://localhost:8002/api/v1/widget/session" \
   -H "X-Widget-Key: pk_live_sigires_8f9a2b1c3d4e5f6a" \
   -H "Origin: http://localhost:5173" \
   -d '{
-    "client_id": "sigires",
-    "origin": "http://localhost:5173",
-    "eps_id": "EPS_SURA",
-    "ips_code": "631300040301"
+    "org_id": "sigires",
+    "site_code": "110010999901",
+    "origin": "http://localhost:5173"
   }'
 ```
 
@@ -232,10 +232,12 @@ curl -X POST "http://localhost:8002/api/v1/widget/session" \
 ```json
 {
   "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlNTVmNmE3Yi0...",
-  "client_id": "otra_empresa",
-  "client_name": "Entidad Corporativa Externa",
-  "tenant_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
-  "tenant_name": "División Operativa Central",
+  "org_id": "otra_empresa",
+  "org_name": "Organización Demo Central",
+  "site_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
+  "site_name": "Sede Operativa Central",
+  "site_code": "SEDE-CTRL-01",
+  "site_label": "Sede",
   "expires_in_seconds": 1800
 }
 ```
@@ -344,7 +346,7 @@ event: error_diagnostic
 data: null
 
 event: sources
-data: [{"document_title":"Manual Corporativo de Compras y Aprobaciones","scope":"ACCOUNT","section":"Flujo de Aprobación de Órdenes de Compra"}]
+data: [{"document_title":"Manual Corporativo de Compras y Aprobaciones","scope":"ORGANIZATION","section":"Flujo de Aprobación de Órdenes de Compra"}]
 
 event: done
 data: {"status":"COMPLETED"}
@@ -384,7 +386,7 @@ curl -X POST "http://localhost:8000/api/v1/chat/query" \
   "sources": [
     {
       "document_title": "Manual Corporativo de Compras y Aprobaciones",
-      "scope": "ACCOUNT",
+      "scope": "ORGANIZATION",
       "section": "Flujo de Aprobación de Órdenes de Compra"
     }
   ]
@@ -403,8 +405,8 @@ curl -X POST "http://localhost:8000/api/v1/chat/query" \
     "user": {
       "id": "ana.martinez",
       "role": "ANALISTA_COMPRAS",
-      "organization": "División Operativa Central",
-      "unit_code": "CORP-01"
+      "organization": "Organización Demo Central",
+      "unit_code": "SEDE-CTRL-01"
     },
     "context": {
       "url": "https://portal.empresa.com/compras/ordenes",
@@ -473,14 +475,14 @@ Cuando la consulta incluye logs técnicos, `error_diagnostic` retorna el objeto 
 
 # PARTE 3: Para Administradores y Monitoreo (Observabilidad)
 
-El panel administrativo permite consultar consumo de tokens, costos en USD, trazas de mensajes sanitizados y eventos de seguridad con aislamiento por `client_id`.
+El panel administrativo permite consultar consumo de tokens, costos en USD, trazas de mensajes sanitizados y eventos de seguridad con aislamiento por `org_id`.
 
 ### 3.1 Login y Gestión de Administradores (`auth-service`)
 
-- **Nota de Seguridad / Bootstrap:** Al iniciar `auth-service` con una base de datos vacía, el primer `SUPERADMIN` (`BOOTSTRAP_ADMIN_USERNAME`, por defecto `superadmin`) se siembra usando la contraseña configurada en `BOOTSTRAP_ADMIN_PASSWORD` dentro de `codigo/auth-service/.env` (`AdminPassword2026!` en `.env.example`, o el valor configurado en su entorno; si se deja vacío, se genera una contraseña aleatoria en los logs de arranque).
-- Los usuarios `CLIENT_ADMIN` (restringidos a un `client_id` específico, como `otra_empresa` o `sigires`) **no se siembran automáticamente**; un `SUPERADMIN` debe crearlos mediante `POST /api/v1/admin/users`.
+- **Nota de Seguridad / Bootstrap:** Al iniciar `auth-service` con una base de datos vacía, el primer `GLOBAL_ADMIN` (`BOOTSTRAP_ADMIN_USERNAME`, por defecto `superadmin`) se siembra usando la contraseña configurada en `BOOTSTRAP_ADMIN_PASSWORD` dentro de `codigo/auth-service/.env` (`AdminPassword2026!` en `.env.example`, o el valor configurado en su entorno; si se deja vacío, se genera una contraseña aleatoria en los logs de arranque).
+- Los usuarios `ORG_ADMIN` (restringidos a un `org_id` específico, como `otra_empresa` o `sigires`) **no se siembran automáticamente**; un `GLOBAL_ADMIN` debe crearlos mediante `POST /api/v1/admin/users`.
 
-#### A. Login como `SUPERADMIN` (Acceso Global a todos los clientes):
+#### A. Login como `GLOBAL_ADMIN` (Acceso Global a todas las organizaciones):
 
 ```bash
 curl -X POST "http://localhost:8002/api/v1/admin/auth/login" \
@@ -500,34 +502,37 @@ curl -X POST "http://localhost:8002/api/v1/admin/auth/login" \
   "expires_in_seconds": 3600,
   "admin_id": "c1f7b889-1234-4b8a-9f12-9876543210ab",
   "username": "superadmin",
-  "role": "SUPERADMIN",
-  "client_id": null
+  "role": "GLOBAL_ADMIN",
+  "org_id": null,
+  "org_name": null,
+  "site_label": "Sede",
+  "site_label_plural": "Sedes"
 }
 ```
 
-#### B. Crear un Administrador de Cliente (`CLIENT_ADMIN`) con `SUPERADMIN`:
+#### B. Crear un Administrador de Organización (`ORG_ADMIN`) con `GLOBAL_ADMIN`:
 
 ```bash
 curl -X POST "http://localhost:8002/api/v1/admin/users" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <SUPERADMIN_ACCESS_TOKEN>" \
+  -H "Authorization: Bearer <GLOBAL_ADMIN_ACCESS_TOKEN>" \
   -d '{
     "username": "empresa_admin",
-    "password": "ClientAdminPass2026!",
-    "role": "CLIENT_ADMIN",
-    "client_id": "otra_empresa",
-    "full_name": "Administrador Entidad Corporativa"
+    "password": "OrgAdminPass2026!",
+    "role": "ORG_ADMIN",
+    "org_id": "otra_empresa",
+    "full_name": "Administrador Organización Demo Central"
   }'
 ```
 
-#### C. Login como `CLIENT_ADMIN` (Acceso restringido a su `client_id`):
+#### C. Login como `ORG_ADMIN` (Acceso restringido a su `org_id`):
 
 ```bash
 curl -X POST "http://localhost:8002/api/v1/admin/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "empresa_admin",
-    "password": "ClientAdminPass2026!"
+    "password": "OrgAdminPass2026!"
   }'
 ```
 
@@ -540,15 +545,117 @@ curl -X POST "http://localhost:8002/api/v1/admin/auth/login" \
 - **Cabecera:** `Authorization: Bearer <ADMIN_ACCESS_TOKEN>`
 
 ```bash
-curl -X GET "http://localhost:8000/api/v1/admin/usage/summary" \
+curl -X GET "http://localhost:8000/api/v1/admin/usage/summary?days=30" \
   -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
 ```
 
-También están disponibles los desgloses por usuario (`/usage/by-user`), rol (`/usage/by-role`), modelo (`/usage/by-model`) y tenant (`/usage/by-tenant`).
+También están disponibles la serie temporal diaria (`/usage/timeseries?days=30` o `date_from`/`date_to`) y los desgloses por usuario (`/usage/by-user`), rol (`/usage/by-role`), modelo (`/usage/by-model`), sede (`/usage/by-site`) y transacciones (`/usage/records`).
 
 ---
 
-### 3.3 Consulta de Logs de Seguridad y Guardrails (`back-chat`)
+### 3.3 Gestión de Organizaciones y Sedes (`auth-service`)
+
+#### A. Listar, crear o personalizar una Organización
+
+```bash
+# Listar organizaciones visibles según rol (GLOBAL_ADMIN ve todas; ORG_ADMIN ve la suya)
+curl -X GET "http://localhost:8002/api/v1/admin/organizations" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
+
+# Crear nueva organización con etiquetas personalizadas (solo GLOBAL_ADMIN)
+curl -X POST "http://localhost:8002/api/v1/admin/organizations" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <GLOBAL_ADMIN_TOKEN>" \
+  -d '{
+    "org_id": "auto_talleres",
+    "nombre": "Red Auto Talleres",
+    "site_label": "Taller",
+    "site_label_plural": "Talleres",
+    "busqueda_api_url": "http://localhost:8001",
+    "dominios_permitidos": ["https://talleres.acme.com", "http://localhost:5173"]
+  }'
+
+# Personalizar nomenclatura de sedes (permitido también para ORG_ADMIN sobre su propia organización)
+curl -X PATCH "http://localhost:8002/api/v1/admin/organizations/auto_talleres" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>" \
+  -d '{
+    "site_label": "Sucursal",
+    "site_label_plural": "Sucursales"
+  }'
+```
+
+#### B. Listar, crear sede o rotar clave de conexión (`GLOBAL_ADMIN` u `ORG_ADMIN`)
+
+```bash
+# Listar sedes visibles según rol (ORG_ADMIN queda limitado a su org_id)
+curl -X GET "http://localhost:8002/api/v1/admin/sites" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
+
+# Crear sede y obtener clave de conexión pública (pk_live_*)
+curl -X POST "http://localhost:8002/api/v1/admin/sites" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>" \
+  -d '{
+    "nombre": "Taller Norte",
+    "site_code": "TLL-NORTE-01",
+    "dominios_permitidos": ["https://talleres.acme.com", "http://localhost:5173"]
+  }'
+
+# Actualizar dominios, estado (ACTIVE / SUSPENDED) o rotar clave de conexión
+curl -X PATCH "http://localhost:8002/api/v1/admin/sites/<SITE_ID>" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>" \
+  -d '{
+    "status": "ACTIVE",
+    "rotate_api_key": true
+  }'
+```
+
+---
+
+### 3.4 Gestión de Documentos del Asistente por Sede (`back-chat`)
+
+#### A. Cargar documento por texto o Base64 (con deduplicación SHA-256)
+
+```bash
+# Cargar política exclusiva para una sede específica (scope="SITE")
+curl -X POST "http://localhost:8000/api/v1/admin/documents" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>" \
+  -d '{
+    "title": "Guía de Recepción - Taller Norte",
+    "filename": "guia-recepcion.md",
+    "scope": "SITE",
+    "site_id": "<SITE_ID>",
+    "content_text": "# Recepción\nToda orden de servicio requiere revisión de kilometraje.",
+    "tags": ["recepcion", "taller-norte"]
+  }'
+```
+
+#### B. Listar, inspeccionar fragmentos, re-sincronizar o eliminar documentos
+
+```bash
+# Listar inventario de documentos (incluye counts_by_site)
+curl -X GET "http://localhost:8000/api/v1/admin/documents?scope=SITE&site_id=<SITE_ID>" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
+
+# Inspeccionar fragmentos extraídos
+curl -X GET "http://localhost:8000/api/v1/admin/documents/<DOC_ID>/chunks" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
+
+# Reintentar sincronización con back-busqueda (/api/v1/documents/ingest)
+curl -X POST "http://localhost:8000/api/v1/admin/documents/<DOC_ID>/sync" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
+
+# Eliminar documento y sus fragmentos asociados
+curl -X DELETE "http://localhost:8000/api/v1/admin/documents/<DOC_ID>" \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
+```
+
+---
+
+### 3.5 Consulta de Logs de Seguridad y Guardrails (`back-chat`)
 
 Permite auditar bloqueos por inyección de prompts, consultas fuera de dominio y fallos de autenticación:
 
@@ -563,7 +670,7 @@ curl -X GET "http://localhost:8000/api/v1/admin/logs/security?limit=50" \
 
 ---
 
-### 3.4 Consulta de Trazas de Mensajes Sanitizados (`back-chat`)
+### 3.6 Consulta de Trazas de Mensajes Sanitizados (`back-chat`)
 
 Permite auditar las consultas realizadas, verificando que los datos PII hayan sido anonimizados:
 

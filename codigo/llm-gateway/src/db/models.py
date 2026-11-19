@@ -14,11 +14,13 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Engine,
     Float,
     Integer,
     String,
     create_engine,
     event,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -37,11 +39,11 @@ class UsageRecordORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ledger_id: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
     request_id: Mapped[Optional[str]] = mapped_column(String(64), index=True, nullable=True)
-    client_id: Mapped[str] = mapped_column(String(100), index=True, default="default")
-    tenant_id: Mapped[str] = mapped_column(String(100), index=True, default="unknown")
+    org_id: Mapped[str] = mapped_column(String(100), index=True, default="default")
+    site_id: Mapped[str] = mapped_column(String(100), index=True, default="unknown")
     usuario: Mapped[str] = mapped_column(String(255), index=True, default="anonimo")
     rol: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
-    ips_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    site_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     operacion: Mapped[str] = mapped_column(String(100), index=True, default="INFERENCE")
     tokens_input: Mapped[int] = mapped_column(Integer, default=0)
     tokens_output: Mapped[int] = mapped_column(Integer, default=0)
@@ -55,6 +57,46 @@ class UsageRecordORM(Base):
     token_source: Mapped[str] = mapped_column(String(50), default="estimated")
     query_preview: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
+
+
+def _migrate_legacy_ledger_sqlite(engine: Engine) -> None:
+    """Migra columnas heredadas client_id/tenant_id/ips_code -> org_id/site_id/site_code en SQLite."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    column_renames = (
+        ("client_id", "org_id"),
+        ("tenant_id", "site_id"),
+        ("ips_code", "site_code"),
+    )
+
+    with engine.begin() as conn:
+        exists = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_usage_ledger'")
+        ).scalar()
+        if not exists:
+            return
+
+        cols = {
+            row[1]
+            for row in conn.execute(text('PRAGMA table_info("ai_usage_ledger")')).fetchall()
+        }
+        for old_col, new_col in column_renames:
+            if old_col in cols and new_col not in cols:
+                conn.execute(
+                    text(f'ALTER TABLE "ai_usage_ledger" RENAME COLUMN "{old_col}" TO "{new_col}"')
+                )
+                cols.remove(old_col)
+                cols.add(new_col)
+
+        if "org_id" in cols:
+            conn.execute(
+                text('CREATE INDEX IF NOT EXISTS "ix_ai_usage_ledger_org_id" ON "ai_usage_ledger" ("org_id")')
+            )
+        if "site_id" in cols:
+            conn.execute(
+                text('CREATE INDEX IF NOT EXISTS "ix_ai_usage_ledger_site_id" ON "ai_usage_ledger" ("site_id")')
+            )
 
 
 class Database:
@@ -76,6 +118,7 @@ class Database:
         self.SessionLocal = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def create_all(self) -> None:
+        _migrate_legacy_ledger_sqlite(self.engine)
         Base.metadata.create_all(self.engine)
 
     def session(self) -> Iterator[Session]:

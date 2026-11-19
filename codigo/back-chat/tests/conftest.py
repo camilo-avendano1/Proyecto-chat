@@ -4,8 +4,13 @@ Pytest configuration and shared fixtures for SIGIRES Back Central.
 
 import os
 os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
+import shutil
+import tempfile
 import pytest
 from fastapi.testclient import TestClient
+
+_TEST_TEMP_DIR = tempfile.mkdtemp(prefix="back_chat_knowledge_")
+_TEST_KNOWLEDGE_DB_URL = f"sqlite:///{os.path.join(_TEST_TEMP_DIR, 'knowledge_docs_test.db').replace(os.sep, '/')}"
 
 # Set test environment
 os.environ["ENVIRONMENT"] = "testing"
@@ -13,9 +18,24 @@ os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_1234567890_abcdef"
 os.environ["DEFAULT_WIDGET_API_KEY"] = "pk_live_sigires_8f9a2b1c3d4e5f6a"
 os.environ["FALLBACK_LOCAL_SEARCH"] = "true"
 os.environ["MOCK_LLM_IF_NO_KEY"] = "true"
+os.environ["KNOWLEDGE_DATABASE_URL"] = _TEST_KNOWLEDGE_DB_URL
+
+from src.config import settings
+settings.KNOWLEDGE_DATABASE_URL = _TEST_KNOWLEDGE_DB_URL
+
+from src.infrastructure.repositories.document_repo import get_document_repository, reset_document_repository
+reset_document_repository(_TEST_KNOWLEDGE_DB_URL)
 
 from src.main import app
 from src.infrastructure.security.jwt_handler import default_jwt_handler
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_knowledge_db():
+    reset_document_repository(_TEST_KNOWLEDGE_DB_URL)
+    yield
+    get_document_repository().close()
+    shutil.rmtree(_TEST_TEMP_DIR, ignore_errors=True)
 
 
 @pytest.fixture
@@ -35,12 +55,12 @@ def valid_session_token() -> str:
     """Generates a valid signed JWT session token for EPS Sura."""
     token = default_jwt_handler.create_session_token({
         "sub": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-        "client_id": "sigires",
-        "client_name": "SIGIRES",
-        "tenant_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-        "tenant_name": "EPS Sura - Regional Nor-Occidente",
-        "eps_id": "eps_sura_01",
-        "ips_code": "631300040301",
+        "org_id": "sigires",
+        "org_name": "SIGIRES (Procex Software S.A.S)",
+        "site_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+        "site_name": "EPS Sura - Regional Nor-Occidente",
+        "site_code": "eps_sura_01",
+        "site_label": "IPS",
         "origin": "https://sigires.procex.co",
     })
     return token
@@ -48,13 +68,15 @@ def valid_session_token() -> str:
 
 @pytest.fixture
 def generic_session_token() -> str:
-    """Generates a valid signed JWT session token for a generic multi-client tenant (otra_empresa)."""
+    """Generates a valid signed JWT session token for a generic multi-org site (otra_empresa)."""
     token = default_jwt_handler.create_session_token({
         "sub": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
-        "client_id": "otra_empresa",
-        "client_name": "Entidad Corporativa Externa",
-        "tenant_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
-        "tenant_name": "División Operativa Central",
+        "org_id": "otra_empresa",
+        "org_name": "Organización Demo Central",
+        "site_id": "e55f6a7b-8c9d-0e1f-2a3b-4c5d6e7f8a9b",
+        "site_name": "Sede Operativa Central",
+        "site_code": "sede_central_01",
+        "site_label": "Sede",
         "metadata": {"canal": "portal_web"},
         "origin": "https://portal.otraempresa.com",
     })
@@ -79,8 +101,8 @@ def sample_diagnostic_payload() -> dict:
             "usuario": "dr.juan.perez",
             "filial": "REGIONAL_NOR_OCCIDENTE",
             "eps": "EPS_SURA",
-            "ips_code": "631300040301",
-            "ips_nombre": "IPS San Rafael Sede Principal",
+            "site_code": "631300040301",
+            "site_name": "IPS San Rafael Sede Principal",
             "permisos": "PERFIL_IPS_RADICADOR"
         },
         "conversation_history": [

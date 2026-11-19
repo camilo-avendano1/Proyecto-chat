@@ -5,7 +5,7 @@ Endpoints:
 - POST /api/v1/chat/query        (Synchronous JSON response - primary generic endpoint)
 - POST /api/v1/diagnostic/stream (Legacy compatible SSE alias)
 - POST /api/v1/diagnostic/query  (Legacy compatible JSON alias)
-Supports multi-client dynamic routing to the corresponding search backend.
+Supports multi-organization dynamic routing to the corresponding search backend.
 """
 
 from typing import Any, Dict
@@ -23,7 +23,7 @@ from src.models.diagnostic import (
 from src.operations.diagnostic_operations import DiagnosticOperations
 
 router = APIRouter(prefix="/api/v1/diagnostic", tags=["Diagnóstico y Chat RAG"])
-chat_router = APIRouter(prefix="/api/v1/chat", tags=["Chat RAG Multi-Cliente"])
+chat_router = APIRouter(prefix="/api/v1/chat", tags=["Chat RAG Multi-Organización"])
 
 # Composition root dependencies
 _search_client = BusquedaHttpClient()
@@ -47,12 +47,12 @@ def get_ledger_repository() -> InMemoryLedgerRepository:
 def _extract_session_context(session: Dict[str, Any]) -> Dict[str, Any]:
     raw_metadata = session.get("metadata")
     return {
-        "tenant_id": session.get("tenant_id") or "tenant_default",
-        "client_id": session.get("client_id") or "default",
-        "client_name": session.get("client_name") or "la Plataforma",
+        "site_id": session.get("site_id") or "site_default",
+        "org_id": session.get("org_id") or "default",
+        "org_name": session.get("org_name") or "la Plataforma",
         "busqueda_api_url": session.get("busqueda_api_url"),
         "session_metadata": raw_metadata if isinstance(raw_metadata, dict) else None,
-        "session_org_code": session.get("ips_code"),
+        "session_site_code": session.get("site_code"),
     }
 
 
@@ -60,12 +60,12 @@ async def _handle_stream(body: ChatRequest, session: Dict[str, Any]) -> Streamin
     ctx = _extract_session_context(session)
     event_generator = _diagnostic_ops.execute_stream(
         request=body,
-        tenant_id=ctx["tenant_id"],
-        client_id=ctx["client_id"],
+        site_id=ctx["site_id"],
+        org_id=ctx["org_id"],
         busqueda_api_url=ctx["busqueda_api_url"],
-        client_name=ctx["client_name"],
+        org_name=ctx["org_name"],
         session_metadata=ctx["session_metadata"],
-        session_org_code=ctx["session_org_code"],
+        session_site_code=ctx["session_site_code"],
     )
     return StreamingResponse(
         event_generator,
@@ -83,12 +83,12 @@ async def _handle_query(body: ChatRequest, session: Dict[str, Any]) -> ChatQuery
     try:
         return await _diagnostic_ops.execute_query(
             request=body,
-            tenant_id=ctx["tenant_id"],
-            client_id=ctx["client_id"],
+            site_id=ctx["site_id"],
+            org_id=ctx["org_id"],
             busqueda_api_url=ctx["busqueda_api_url"],
-            client_name=ctx["client_name"],
+            org_name=ctx["org_name"],
             session_metadata=ctx["session_metadata"],
-            session_org_code=ctx["session_org_code"],
+            session_site_code=ctx["session_site_code"],
         )
     except Exception as exc:
         raise HTTPException(
@@ -101,7 +101,7 @@ async def _handle_query(body: ChatRequest, session: Dict[str, Any]) -> ChatQuery
     "/stream",
     summary="Chat RAG en Streaming (SSE)",
     description=(
-        "Endpoint principal multi-cliente para chat en tiempo real mediante Server-Sent Events "
+        "Endpoint principal multi-organización para chat en tiempo real mediante Server-Sent Events "
         "(chunk, error_diagnostic, sources, done)."
     ),
     response_class=StreamingResponse,
@@ -118,7 +118,7 @@ async def stream_chat(
     response_model=ChatQueryResponse,
     status_code=status.HTTP_200_OK,
     summary="Chat RAG Síncrono (JSON)",
-    description="Endpoint síncrono multi-cliente que retorna la respuesta, diagnóstico opcional y fuentes consultadas.",
+    description="Endpoint síncrono multi-organización que retorna la respuesta, diagnóstico opcional y fuentes consultadas.",
 )
 async def query_chat(
     body: ChatRequest,

@@ -1,5 +1,5 @@
 # Core SaaS Chat & RAG Gateway (`back-chat`)
-## Orquestador Conversacional y de Búsqueda RAG Multi-Cliente
+## Orquestador Conversacional y de Búsqueda RAG Multi-Organización
 
 > **Equipo de Desarrollo (Autores):**  
 > - **Juan Camilo Avendaño**  
@@ -7,14 +7,14 @@
 > - **Adriana Moreno**  
 >
 > **Enfoque Genérico y Desacoplado:**  
-> Este microservicio actúa como el **orquestador central de chat RAG** para múltiples clientes empresariales (portales corporativos, mesas de ayuda, bases de conocimiento internas o plataformas técnicas como **SIGIRES**).  
+> Este microservicio actúa como el **orquestador central de chat RAG** para múltiples organizaciones y sedes (portales corporativos, comercios/tiendas, talleres, IPS/clínicas, mesas de ayuda y plataformas técnicas como **SIGIRES**).  
 > - Expone los endpoints principales **`POST /api/v1/chat/stream`** (SSE) y **`POST /api/v1/chat/query`** (JSON), aceptando peticiones tan simples como `{"query": "..."}` y enriquecimiento opcional (`user`, `context`, `logs`, `extras`, `conversation_history`).  
 > - Mantiene **`POST /api/v1/diagnostic/stream`** y **`POST /api/v1/diagnostic/query`** (junto con `system_logs`, `ui_context`, `user_context`) como alias de compatibilidad retroactiva.  
-> - El conocimiento, manuales, políticas y reglamentos no están quemados en este servicio: provienen dinámicamente de **`back-busqueda`** (`POST /api/v1/search`).
+> - El conocimiento, manuales, políticas y reglamentos no están quemados en este servicio: provienen dinámicamente de **`back-busqueda`** (`POST /api/v1/search`) y de los documentos cargados por organización/sede (`/api/v1/admin/documents`).
 
 ---
 
-## 1. Diagrama de Flujo y Enrutamiento Multi-Cliente
+## 1. Diagrama de Flujo y Enrutamiento Multi-Organización
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -28,9 +28,9 @@
 │                      SAAS CORE BACK CENTRAL (back-chat)                │
 │  (Desarrollado por: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno)│
 │                                                                        │
-│  1. Validación de JWT de Sesión (client_id, tenant_id, busqueda_url)   │
+│  1. Validación de JWT de Sesión (org_id, site_id, busqueda_url)        │
 │  2. Sanitización PII / PHI (Cumplimiento Ley Estatutaria 1581 de 2012) │
-│  3. Guardrails Pre-LLM (Saludos 0 tokens, Bloqueo de Inyecciones)      │
+│  3. Guardrails Pre-LLM (Respuestas directas 0 tokens, Anti-Injection)  │
 │  4. Extracción Condicional de Logs (solo si hay logs/código técnico)   │
 │  5. Búsqueda RAG en `back-busqueda`: query + extras sanitizados        │
 │  6. Ensamblaje de Prompt Genérico: Rol + Contexto Opcional + RAG       │
@@ -42,8 +42,8 @@
 │    back-busqueda (:8001)     │         │      llm-gateway (:8003)     │
 │                              │         │                              │
 │ - Devuelve fragmentos RAG    │         │ - LOCAL (LM Studio :1234)    │
-│   aislados por client_id y   │         │ - LOCAL (Ollama :11434)      │
-│   tenant_id                  │         │ - CLOUD (OpenAI / DeepSeek)  │
+│   aislados por org_id y      │         │ - LOCAL (Ollama :11434)      │
+│   site_id (SITE/ORG/GLOBAL)  │         │ - CLOUD (OpenAI / DeepSeek)  │
 └──────────────────────────────┘         └──────────────────────────────┘
 ```
 
@@ -56,14 +56,15 @@
    - Campos opcionales: `user` (identidad/rol/organización/sede), `context` (pantalla/módulo/formato/estado), `logs` (trazas de error), `extras` (metadatos para filtrar o priorizar en `back-busqueda`) y `conversation_history`.
    - Alias de compatibilidad: `/api/v1/diagnostic/stream` y `/api/v1/diagnostic/query`.
 2. **System Prompt y Prompt de Usuario ([`src/operations/prompt_builder.py`](src/operations/prompt_builder.py)):**
-   - Configura un asistente virtual técnico/operativo adaptado a `client_name` y al perfil del usuario (si se envía).
-   - Se apoya en los fragmentos recuperados desde `back-busqueda` sin asumir reglas de un dominio específico cuando no están presentes en el contexto.
+   - Configura un asistente virtual técnico/operativo adaptado a `org_name` y al perfil del usuario (si se envía).
+   - Se apoya en los fragmentos recuperados desde `back-busqueda` o desde los documentos locales del asistente sin asumir reglas de un dominio específico cuando no están presentes en el contexto.
 3. **Parser Condicional de Logs ([`src/operations/log_parser_operations.py`](src/operations/log_parser_operations.py)):**
    - Si no se adjuntan `logs` ni patrones técnicos explícitos en la consulta, `error_diagnostic` se retorna como `null` (JSON) o `data: null` (SSE).
    - Cuando se adjuntan trazas técnicas, extrae fila, campo/variable, código de error y fase (`FASE_1_CA`, `FASE_2_CE`, `FASE_3_CD`).
 4. **Búsqueda de Contexto ([`src/infrastructure/external/busqueda_client.py`](src/infrastructure/external/busqueda_client.py)):**
-   - Envía `{ query, client_id, tenant_id, top_k, extras }` a la URL de `back-busqueda` del cliente.
-   - Sanea `extras` (claves `snake_case`, valores escalares o listas planas, máx. 20 claves) combinando los `extras` enviados por el cliente y las pistas extraídas de logs si existen.
+   - Envía `{ query, org_id, site_id, top_k, extras }` a la URL de `back-busqueda` configurada para la organización (`ORG_BUSQUEDA_URLS`).
+   - Sanea `extras` (claves `snake_case`, valores escalares o listas planas, máx. 20 claves) combinando los `extras` enviados por la integración y las pistas extraídas de logs si existen.
+   - Si `back-busqueda` no está disponible y `FALLBACK_LOCAL_SEARCH=true`, resuelve contra los documentos cargados en `data/knowledge_docs.db` respetando estrictamente `org_id`, `site_id` y alcance (`SITE`, `ORGANIZATION`, `GLOBAL`).
 
 ---
 
@@ -98,9 +99,9 @@ codigo/back-chat/
 │   ├── main.py                          # Entrada FastAPI, lifespan, CORS, middleware de auditoría
 │   ├── config.py                        # Configuración Pydantic Settings (.env)
 │   ├── domain/                          # Entidades y objetos de valor desacoplados
-│   ├── operations/                      # Casos de uso (orquestación chat/RAG, guardrails, log parser, prompt builder, PII sanitizer, sesión)
-│   ├── infrastructure/                  # Adaptadores HTTP (busqueda_client, llm_gateway_client), seguridad JWT y auditoría
-│   ├── models/                          # Esquemas Pydantic v2 (chat mínimo/enriquecido y alias legacy)
+│   ├── operations/                      # Casos de uso (orquestación chat/RAG, documentos, guardrails, log parser, prompt builder, PII sanitizer, sesión)
+│   ├── infrastructure/                  # Adaptadores HTTP (busqueda_client, llm_gateway_client), repositorios, seguridad JWT y auditoría
+│   ├── models/                          # Esquemas Pydantic v2 (chat mínimo/enriquecido y gestión de documentos/sedes)
 │   └── routers/                         # Endpoints FastAPI (/api/v1/chat/*, /api/v1/diagnostic/*, /api/v1/widget/session, /api/v1/admin/*)
 └── tests/                               # Suite automatizada con pytest
 ```
@@ -109,13 +110,13 @@ codigo/back-chat/
 
 ## 5. Ejecución y Pruebas
 
-```bash
+```powershell
 # Iniciar el servidor en desarrollo
-uvicorn src.main:app --reload --port 8000
+$env:DISABLE_SQLALCHEMY_CEXT="1"; uvicorn src.main:app --reload --port 8000
 
 # Prueba rápida end-to-end (con auth-service y back-chat activos)
 python prueba.py
 
 # Ejecutar suite de pruebas
-pytest -v
+$env:DISABLE_SQLALCHEMY_CEXT="1"; pytest -v
 ```

@@ -48,9 +48,9 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 1200
     FALLBACK_SIMULATION_ON_LLM_ERROR: bool = True
 
-    # Multi-Client Search API routing
+    # Multi-Organization Search API routing
     BACK_BUSQUEDA_URL: str = "http://localhost:8001"
-    CLIENT_BUSQUEDA_URLS: Dict[str, str] = {
+    ORG_BUSQUEDA_URLS: Dict[str, str] = {
         "sigires": "http://localhost:8001",
         "default": "http://localhost:8001"
     }
@@ -72,6 +72,9 @@ class Settings(BaseSettings):
 
     # Base de datos central de auditoría de logs
     LOGS_DATABASE_URL: str = f"sqlite:///{(CODIGO_DIR / 'data' / 'saas_logs.db').as_posix()}"
+    # Base de datos de documentos y chunks de conocimiento (Flujo 3)
+    KNOWLEDGE_DATABASE_URL: str = f"sqlite:///{(CODIGO_DIR / 'data' / 'knowledge_docs.db').as_posix()}"
+    MAX_DOCUMENT_SIZE_BYTES: int = 15 * 1024 * 1024
     ENABLE_AUDIT_DB: bool = True
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = str(SERVICE_DIR / "logs")
@@ -87,8 +90,10 @@ class Settings(BaseSettings):
         "https://sigires.procex.co",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
     ]
 
 

@@ -1,22 +1,22 @@
 """
 Protocols and interfaces for the Operations layer.
 Implements dependency inversion via structural typing (Protocol).
-Supports Multi-Client and Multi-Tenant routing.
+Supports Multi-Organization and Multi-Site routing.
 """
 
 from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol
-from src.domain.entities import ClientCompany, KnowledgeSource, Tenant, UsageLedgerRecord
+from src.domain.entities import KnowledgeSource, Organization, Site, UsageLedgerRecord
 
 
 class SearchServiceProtocol(Protocol):
-    """Protocol for communicating with Client Search APIs (Retrieval Service)."""
+    """Protocol for communicating with Organization Search APIs (Retrieval Service)."""
 
     async def search(
         self,
         query: str,
-        client_id: Optional[str] = None,
+        org_id: Optional[str] = None,
         busqueda_api_url: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        site_id: Optional[str] = None,
         category: Optional[str] = None,
         variable_num: Optional[int] = None,
         error_code: Optional[str] = None,
@@ -52,22 +52,22 @@ class LLMServiceProtocol(Protocol):
 
 
 class SessionRepositoryProtocol(Protocol):
-    """Protocol for client, tenant, and session management."""
+    """Protocol for organization, site, and session management."""
 
-    def get_client_by_id(self, client_id: str) -> Optional[ClientCompany]:
-        """Resolves client company by ID."""
+    def get_organization_by_id(self, org_id: str) -> Optional[Organization]:
+        """Resolves organization by ID."""
         ...
 
-    def get_tenant_by_key(self, api_key: str) -> Optional[Tenant]:
-        """Resolves tenant from API Key."""
+    def get_site_by_key(self, api_key: str) -> Optional[Site]:
+        """Resolves site from API Key."""
         ...
 
-    def get_tenant_by_id(self, tenant_id: str) -> Optional[Tenant]:
-        """Resolves tenant by UUID."""
+    def get_site_by_id(self, site_id: str) -> Optional[Site]:
+        """Resolves site by UUID."""
         ...
 
-    def get_tenant_by_eps_code(self, eps_code: str) -> Optional[Tenant]:
-        """Resolves tenant by EPS/Division code."""
+    def get_site_by_code(self, site_code: str) -> Optional[Site]:
+        """Resolves site by site code."""
         ...
 
 
@@ -80,8 +80,8 @@ class LedgerRepositoryProtocol(Protocol):
 
     async def get_usage_summary(
         self,
-        tenant_id: Optional[str] = None,
-        client_id: Optional[str] = None,
+        site_id: Optional[str] = None,
+        org_id: Optional[str] = None,
         usuario: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Calculates total usage statistics."""
@@ -89,23 +89,23 @@ class LedgerRepositoryProtocol(Protocol):
 
     async def get_usage_by_user(
         self,
-        tenant_id: Optional[str] = None,
-        client_id: Optional[str] = None,
+        site_id: Optional[str] = None,
+        org_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Aggregates token consumption and costs grouped by user."""
         ...
 
-    async def get_usage_by_tenant(
+    async def get_usage_by_site(
         self,
-        client_id: Optional[str] = None,
+        org_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Aggregates token consumption and costs grouped by tenant."""
+        """Aggregates token consumption and costs grouped by site."""
         ...
 
     async def get_recent_records(
         self,
         limit: int = 50,
-        tenant_id: Optional[str] = None,
+        site_id: Optional[str] = None,
         usuario: Optional[str] = None,
     ) -> List[UsageLedgerRecord]:
         """Returns recent ledger usage records."""
@@ -126,9 +126,9 @@ class SearchServiceStub:
     async def search(
         self,
         query: str,
-        client_id: Optional[str] = None,
+        org_id: Optional[str] = None,
         busqueda_api_url: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        site_id: Optional[str] = None,
         category: Optional[str] = None,
         variable_num: Optional[int] = None,
         error_code: Optional[str] = None,
@@ -137,9 +137,9 @@ class SearchServiceStub:
     ) -> List[KnowledgeSource]:
         self.call_history.append({
             "query": query,
-            "client_id": client_id,
+            "org_id": org_id,
             "busqueda_api_url": busqueda_api_url,
-            "tenant_id": tenant_id,
+            "site_id": site_id,
             "category": category,
             "variable_num": variable_num,
             "error_code": error_code,
@@ -154,7 +154,7 @@ class SearchServiceStub:
 class LLMServiceStub:
     """In-memory stub for LLMServiceProtocol."""
 
-    def __init__(self, simulated_response: str = "Respuesta simulada del asistente clínico."):
+    def __init__(self, simulated_response: str = "Respuesta simulada del asistente técnico."):
         self.simulated_response = simulated_response
         self.call_history: List[Dict[str, Any]] = []
 
@@ -196,28 +196,28 @@ class SessionRepositoryStub:
 
     def __init__(
         self,
-        clients: Optional[Dict[str, ClientCompany]] = None,
-        tenants: Optional[Dict[str, Tenant]] = None
+        organizations: Optional[Dict[str, Organization]] = None,
+        sites: Optional[Dict[str, Site]] = None,
     ):
-        self.clients = clients or {}
-        self.tenants = tenants or {}
+        self.organizations = organizations or {}
+        self.sites = sites or {}
 
-    def get_client_by_id(self, client_id: str) -> Optional[ClientCompany]:
-        return self.clients.get(client_id)
+    def get_organization_by_id(self, org_id: str) -> Optional[Organization]:
+        return self.organizations.get(org_id)
 
-    def get_tenant_by_key(self, api_key: str) -> Optional[Tenant]:
-        for tenant in self.tenants.values():
-            if tenant.api_key_hash == api_key:
-                return tenant
+    def get_site_by_key(self, api_key: str) -> Optional[Site]:
+        for site in self.sites.values():
+            if site.api_key_hash == api_key:
+                return site
         return None
 
-    def get_tenant_by_id(self, tenant_id: str) -> Optional[Tenant]:
-        return self.tenants.get(tenant_id)
+    def get_site_by_id(self, site_id: str) -> Optional[Site]:
+        return self.sites.get(site_id)
 
-    def get_tenant_by_eps_code(self, eps_code: str) -> Optional[Tenant]:
-        for tenant in self.tenants.values():
-            if tenant.codigo_eps.lower() == eps_code.lower():
-                return tenant
+    def get_site_by_code(self, site_code: str) -> Optional[Site]:
+        for site in self.sites.values():
+            if site.site_code.lower() == site_code.lower():
+                return site
         return None
 
 
@@ -232,14 +232,14 @@ class LedgerRepositoryStub:
 
     async def get_usage_summary(
         self,
-        tenant_id: Optional[str] = None,
-        client_id: Optional[str] = None,
+        site_id: Optional[str] = None,
+        org_id: Optional[str] = None,
         usuario: Optional[str] = None,
     ) -> Dict[str, Any]:
         filtered = [
             r for r in self.records
-            if (tenant_id is None or r.tenant_id == tenant_id)
-            and (client_id is None or r.client_id == client_id)
+            if (site_id is None or r.site_id == site_id)
+            and (org_id is None or r.org_id == org_id)
             and (usuario is None or r.usuario == usuario)
         ]
         return {
@@ -251,20 +251,20 @@ class LedgerRepositoryStub:
 
     async def get_usage_by_user(
         self,
-        tenant_id: Optional[str] = None,
-        client_id: Optional[str] = None,
+        site_id: Optional[str] = None,
+        org_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         users: Dict[str, Dict[str, Any]] = {}
         for r in self.records:
-            if tenant_id and r.tenant_id != tenant_id:
+            if site_id and r.site_id != site_id:
                 continue
-            if client_id and r.client_id != client_id:
+            if org_id and r.org_id != org_id:
                 continue
             u = r.usuario or "anonimo"
             if u not in users:
                 users[u] = {
                     "usuario": u,
-                    "tenant_id": r.tenant_id,
+                    "site_id": r.site_id,
                     "total_requests": 0,
                     "total_tokens_input": 0,
                     "total_tokens_output": 0,
@@ -278,41 +278,41 @@ class LedgerRepositoryStub:
             users[u]["total_cost_usd"] = round(users[u]["total_cost_usd"] + r.costo_usd, 6)
         return list(users.values())
 
-    async def get_usage_by_tenant(
+    async def get_usage_by_site(
         self,
-        client_id: Optional[str] = None,
+        org_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        tenants: Dict[str, Dict[str, Any]] = {}
+        sites: Dict[str, Dict[str, Any]] = {}
         for r in self.records:
-            if client_id and r.client_id != client_id:
+            if org_id and r.org_id != org_id:
                 continue
-            t = r.tenant_id
-            if t not in tenants:
-                tenants[t] = {
-                    "tenant_id": t,
-                    "client_id": r.client_id,
+            s = r.site_id
+            if s not in sites:
+                sites[s] = {
+                    "site_id": s,
+                    "org_id": r.org_id,
                     "total_requests": 0,
                     "total_tokens_input": 0,
                     "total_tokens_output": 0,
                     "total_tokens": 0,
                     "total_cost_usd": 0.0,
                 }
-            tenants[t]["total_requests"] += 1
-            tenants[t]["total_tokens_input"] += r.tokens_input
-            tenants[t]["total_tokens_output"] += r.tokens_output
-            tenants[t]["total_tokens"] += (r.tokens_input + r.tokens_output)
-            tenants[t]["total_cost_usd"] = round(tenants[t]["total_cost_usd"] + r.costo_usd, 6)
-        return list(tenants.values())
+            sites[s]["total_requests"] += 1
+            sites[s]["total_tokens_input"] += r.tokens_input
+            sites[s]["total_tokens_output"] += r.tokens_output
+            sites[s]["total_tokens"] += (r.tokens_input + r.tokens_output)
+            sites[s]["total_cost_usd"] = round(sites[s]["total_cost_usd"] + r.costo_usd, 6)
+        return list(sites.values())
 
     async def get_recent_records(
         self,
         limit: int = 50,
-        tenant_id: Optional[str] = None,
+        site_id: Optional[str] = None,
         usuario: Optional[str] = None,
     ) -> List[UsageLedgerRecord]:
         filtered = [
             r for r in reversed(self.records)
-            if (tenant_id is None or r.tenant_id == tenant_id)
+            if (site_id is None or r.site_id == site_id)
             and (usuario is None or r.usuario == usuario)
         ]
         return filtered[:limit]

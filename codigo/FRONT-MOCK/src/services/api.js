@@ -32,19 +32,18 @@ export async function fetchSystemStatus() {
 
 /**
  * Initializes widget session.
- * Sends a minimal JSON payload (origin + optional client_id, metadata, eps_id, ips_code).
+ * Sends a minimal JSON payload (origin + optional org_id, metadata, site_code).
  * Tries Auth Service (:8002) first, falling back to Back Central proxy (:8000).
  */
-export async function createSession({ origin, apiKey, clientId, metadata, epsId, ipsCode }) {
+export async function createSession({ origin, apiKey, orgId, metadata, siteCode }) {
   const payload = {
     origin: origin || window.location.origin,
   };
-  if (clientId) payload.client_id = clientId;
+  if (orgId) payload.org_id = orgId;
   if (metadata && (typeof metadata !== 'object' || Object.keys(metadata).length > 0)) {
     payload.metadata = metadata;
   }
-  if (epsId) payload.eps_id = epsId;
-  if (ipsCode) payload.ips_code = ipsCode;
+  if (siteCode) payload.site_code = siteCode;
 
   try {
     const res = await fetch(`${AUTH_SERVICE_URL}/api/v1/widget/session`, {
@@ -209,9 +208,9 @@ export async function adminLogin({ username, password }) {
 /**
  * Central Audit Logs queries
  */
-export async function fetchAdminSecurityLogs({ token, clientId, limit = 50 }) {
+export async function fetchAdminSecurityLogs({ token, orgId, limit = 50 }) {
   const url = new URL(`${API_BASE_URL}/api/v1/admin/logs/security`);
-  if (clientId) url.searchParams.set('client_id', clientId);
+  if (orgId) url.searchParams.set('org_id', orgId);
   url.searchParams.set('limit', limit);
   const res = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${token}` }
@@ -220,9 +219,9 @@ export async function fetchAdminSecurityLogs({ token, clientId, limit = 50 }) {
   return await res.json();
 }
 
-export async function fetchAdminMessageLogs({ token, clientId, limit = 50 }) {
+export async function fetchAdminMessageLogs({ token, orgId, limit = 50 }) {
   const url = new URL(`${API_BASE_URL}/api/v1/admin/logs/messages`);
-  if (clientId) url.searchParams.set('client_id', clientId);
+  if (orgId) url.searchParams.set('org_id', orgId);
   url.searchParams.set('limit', limit);
   const res = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${token}` }
@@ -234,9 +233,9 @@ export async function fetchAdminMessageLogs({ token, clientId, limit = 50 }) {
 /**
  * Segmented Usage Metrics queries (Caller attribution & models)
  */
-export async function fetchAdminUsageSummary({ token, clientId }) {
+export async function fetchAdminUsageSummary({ token, orgId }) {
   const url = new URL(`${API_BASE_URL}/api/v1/admin/usage/summary`);
-  if (clientId) url.searchParams.set('client_id', clientId);
+  if (orgId) url.searchParams.set('org_id', orgId);
   const res = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -244,9 +243,9 @@ export async function fetchAdminUsageSummary({ token, clientId }) {
   return await res.json();
 }
 
-export async function fetchAdminUsageByUser({ token, clientId }) {
+export async function fetchAdminUsageByUser({ token, orgId }) {
   const url = new URL(`${API_BASE_URL}/api/v1/admin/usage/by-user`);
-  if (clientId) url.searchParams.set('client_id', clientId);
+  if (orgId) url.searchParams.set('org_id', orgId);
   const res = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -254,19 +253,19 @@ export async function fetchAdminUsageByUser({ token, clientId }) {
   return await res.json();
 }
 
-export async function fetchAdminUsageByTenant({ token, clientId }) {
-  const url = new URL(`${API_BASE_URL}/api/v1/admin/usage/by-tenant`);
-  if (clientId) url.searchParams.set('client_id', clientId);
+export async function fetchAdminUsageBySite({ token, orgId }) {
+  const url = new URL(`${API_BASE_URL}/api/v1/admin/usage/by-site`);
+  if (orgId) url.searchParams.set('org_id', orgId);
   const res = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error('Error al consultar consumo por división/tenant');
+  if (!res.ok) throw new Error('Error al consultar consumo por organización / sede');
   return await res.json();
 }
 
-export async function fetchAdminUsageByRole({ token, clientId }) {
+export async function fetchAdminUsageByRole({ token, orgId }) {
   const url = new URL(`${API_BASE_URL}/api/v1/admin/usage/by-role`);
-  if (clientId) url.searchParams.set('client_id', clientId);
+  if (orgId) url.searchParams.set('org_id', orgId);
   const res = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -274,9 +273,9 @@ export async function fetchAdminUsageByRole({ token, clientId }) {
   return await res.json();
 }
 
-export async function fetchAdminUsageByModel({ token, clientId }) {
+export async function fetchAdminUsageByModel({ token, orgId }) {
   const url = new URL(`${API_BASE_URL}/api/v1/admin/usage/by-model`);
-  if (clientId) url.searchParams.set('client_id', clientId);
+  if (orgId) url.searchParams.set('org_id', orgId);
   const res = await fetch(url.toString(), {
     headers: { 'Authorization': `Bearer ${token}` }
   });

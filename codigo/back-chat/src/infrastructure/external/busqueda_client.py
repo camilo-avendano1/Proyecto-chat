@@ -14,6 +14,7 @@ import httpx
 from src.config import settings
 from src.domain.entities import KnowledgeSource
 from src.domain.value_objects import KnowledgeScope
+from src.infrastructure.repositories.document_repo import get_document_repository
 from src.operations.interfaces import SearchServiceProtocol
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ BUILTIN_KNOWLEDGE_BANK = [
     {
         "keywords": ["delimitador", "pipeline", "pipe", "csv", "txt", "xml", "json", "fase 1", "ca_", "columnas", "estructura"],
         "title": "Lineamientos Técnicos de Estructura y Formatos de Cargue",
-        "scope": KnowledgeScope.ACCOUNT,
+        "scope": KnowledgeScope.ORGANIZATION,
         "section": "Fase 1: Calidad de Archivo y Formato (CA)",
         "snippet": "El archivo o formulario debe respetar el delimitador y esquema definido por el reglamento del formato (TXT, CSV, XML o JSON), codificación UTF-8 sin caracteres de control inválidos y el número exacto de campos exigidos por la plantilla."
     },
@@ -131,9 +132,9 @@ class BusquedaHttpClient(SearchServiceProtocol):
     async def search(
         self,
         query: str,
-        client_id: Optional[str] = None,
+        org_id: Optional[str] = None,
         busqueda_api_url: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        site_id: Optional[str] = None,
         category: Optional[str] = None,
         variable_num: Optional[int] = None,
         error_code: Optional[str] = None,
@@ -141,16 +142,16 @@ class BusquedaHttpClient(SearchServiceProtocol):
         top_k: int = 5,
     ) -> List[KnowledgeSource]:
         """
-        Sends search request to the client-specific Back - Busqueda service.
+        Sends search request to the organization-specific Back - Busqueda service.
         Falls back to local knowledge base if remote service is unreachable.
         """
         sources = []
 
-        # Determine target search API URL for this client
+        # Determine target search API URL for this organization
         target_url = (
             busqueda_api_url
-            or settings.CLIENT_BUSQUEDA_URLS.get(client_id or "default")
-            or settings.CLIENT_BUSQUEDA_URLS.get("default")
+            or settings.ORG_BUSQUEDA_URLS.get(org_id or "default")
+            or settings.ORG_BUSQUEDA_URLS.get("default")
             or self.base_url
         )
         target_url = target_url.rstrip("/")
@@ -165,11 +166,11 @@ class BusquedaHttpClient(SearchServiceProtocol):
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Contrato genérico: núcleo fijo + `extras` dependientes del cliente
+                # Contrato genérico: núcleo fijo + `extras` dependientes de la organización
                 payload = {
                     "query": query,
-                    "client_id": client_id,
-                    "tenant_id": tenant_id,
+                    "org_id": org_id,
+                    "site_id": site_id,
                     "top_k": top_k,
                     "extras": sanitize_extras(merged_extras),
                 }
@@ -204,12 +205,19 @@ class BusquedaHttpClient(SearchServiceProtocol):
                         return sources[:top_k]
         except Exception as exc:
             logger.warning(
-                f"Servicio de Búsqueda no disponible en {target_url} para el cliente '{client_id}' ({exc}). "
+                f"Servicio de Búsqueda no disponible en {target_url} para la organización '{org_id}' ({exc}). "
                 "Activando motor de conocimiento local de contingencia."
             )
 
         if self.fallback_enabled:
-            sources = self._local_search(query, variable_num, error_code, top_k)
+            sources = self._local_search(
+                query,
+                variable_num,
+                error_code,
+                top_k,
+                org_id=org_id,
+                site_id=site_id,
+            )
 
         return sources
 
@@ -218,9 +226,37 @@ class BusquedaHttpClient(SearchServiceProtocol):
         query: str,
         variable_num: Optional[int],
         error_code: Optional[str],
-        top_k: int = 5
+        top_k: int = 5,
+        org_id: Optional[str] = None,
+        site_id: Optional[str] = None,
     ) -> List[KnowledgeSource]:
-        """Local keyword and variable matching heuristic."""
+        """Local uploaded knowledge search first, falling back to built-in contingency bank."""
+        uploaded_matches = get_document_repository().search_chunks(
+            query=query,
+            org_id=org_id,
+            site_id=site_id,
+            top_k=top_k,
+        )
+        if uploaded_matches:
+            uploaded_sources: List[KnowledgeSource] = []
+            for item in uploaded_matches:
+                raw_scope = str(item.get("scope") or "GLOBAL").upper()
+                try:
+                    parsed_scope = KnowledgeScope(raw_scope)
+                except ValueError:
+                    parsed_scope = KnowledgeScope.GLOBAL
+                snippet_text = " ".join(str(item.get("content", "")).splitlines()).strip()
+                uploaded_sources.append(
+                    KnowledgeSource(
+                        document_title=item.get("title", "Documento de Referencia"),
+                        scope=parsed_scope,
+                        section=item.get("section", "General"),
+                        score=float(item.get("score", 0.9)),
+                        snippet=snippet_text,
+                    )
+                )
+            return uploaded_sources[:top_k]
+
         search_terms = query.lower()
         if error_code:
             search_terms += f" {error_code.lower()}"

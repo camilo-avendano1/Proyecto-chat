@@ -20,7 +20,7 @@ from src.config import settings
 from src.core.audit import audit_logger
 from src.core.exceptions import ServiceError
 from src.core.logging_system import request_id_ctx, setup_logging
-from src.db.seed import bootstrap_superadmin, seed_demo_data
+from src.db.seed import bootstrap_global_admin, seed_demo_data
 from src.dependencies import get_db_instance
 from src.routers.admin_router import router as admin_router
 from src.routers.widget_router import router as widget_router
@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
     with next(db_instance.session()) as session:
         if settings.SEED_DEMO_DATA:
             seed_demo_data(session, settings)
-        bootstrap_superadmin(session, settings)
+        bootstrap_global_admin(session, settings)
 
     logger.info("Base de Datos y Administradores inicializados correctamente.")
     logger.info("================================================================")

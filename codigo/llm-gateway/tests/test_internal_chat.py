@@ -10,8 +10,8 @@ def test_internal_chat_missing_key_forbidden(client: TestClient):
         "system_prompt": "Eres un asistente.",
         "user_prompt": "Error variable 14",
         "caller": {
-            "client_id": "sigires",
-            "tenant_id": "tenant-1",
+            "org_id": "sigires",
+            "site_id": "site-1",
             "usuario": "medico_1",
             "rol": "PERFIL_IPS_MEDICO",
         },
@@ -26,8 +26,9 @@ def test_internal_chat_sync_success(client: TestClient, internal_headers: dict):
         "user_prompt": "Tengo un rechazo en el formulario de enfermería en el campo 14",
         "stream": False,
         "caller": {
-            "client_id": "sigires",
-            "tenant_id": "tenant-sura",
+            "org_id": "sigires",
+            "site_id": "site-sura",
+            "site_code": "SC-SURA-01",
             "usuario": "dr_perez",
             "rol": "PERFIL_IPS_MEDICO",
             "operacion": "DIAGNOSTIC_QUERY",
@@ -52,8 +53,9 @@ def test_internal_chat_stream_success(client: TestClient, internal_headers: dict
         "user_prompt": "Error en delimitador pipeline fase 1",
         "stream": True,
         "caller": {
-            "client_id": "sigires",
-            "tenant_id": "tenant-sanitas",
+            "org_id": "sigires",
+            "site_id": "site-sanitas",
+            "site_code": "SC-SAN-01",
             "usuario": "radicador_1",
             "rol": "PERFIL_IPS_RADICADOR",
             "operacion": "DIAGNOSTIC_STREAM",
@@ -69,11 +71,39 @@ def test_internal_chat_stream_success(client: TestClient, internal_headers: dict
     assert "delimitador" in text.lower() or "pipeline" in text.lower()
 
 
+def test_internal_chat_stream_error_logs_audit(client: TestClient, internal_headers: dict, monkeypatch):
+    from src.routers import internal_router
+
+    async def _broken_stream(*args, **kwargs):
+        raise RuntimeError("boom stream")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(internal_router._engine_client, "generate_stream", _broken_stream)
+    payload = {
+        "system_prompt": "Eres un asistente.",
+        "user_prompt": "Prueba error stream",
+        "stream": True,
+        "caller": {
+            "org_id": "sigires",
+            "site_id": "site-sura",
+            "site_code": "SC-SURA-01",
+            "usuario": "stream_err_user",
+            "rol": "PERFIL_IPS_MEDICO",
+            "request_id": "req-stream-err",
+        },
+    }
+    res = client.post("/internal/v1/chat", headers=internal_headers, json=payload)
+    assert res.status_code == 200
+    assert "event: error" in res.text
+    assert "boom stream" in res.text
+
+
 def test_internal_usage_events_record(client: TestClient, internal_headers: dict):
     payload = {
         "caller": {
-            "client_id": "sigires",
-            "tenant_id": "tenant-sura",
+            "org_id": "sigires",
+            "site_id": "site-sura",
+            "site_code": "SC-SURA-01",
             "usuario": "auditor_1",
             "rol": "PERFIL_EPS_AUDITOR",
             "operacion": "FAST_RESPONSE_GREETING",
@@ -98,8 +128,8 @@ def test_internal_chat_minimal_generic_caller(client: TestClient, internal_heade
         "user_prompt": "¿Cómo se aprueba una orden de compra?",
         "stream": False,
         "caller": {
-            "client_id": "otra_empresa",
-            "tenant_id": "t1",
+            "org_id": "otra_empresa",
+            "site_id": "s1",
         },
     }
     res = client.post("/internal/v1/chat", headers=internal_headers, json=payload)
@@ -119,11 +149,13 @@ def test_simulated_response_adaptive_cases():
     from src.db.models import UsageRecordORM
 
     caller = CallerContext()
-    assert caller.client_id == "default"
+    assert caller.org_id == "default"
+    assert caller.site_id == "unknown"
     assert caller.operacion == "CHAT_QUERY"
     assert caller.rol is None
-    assert caller.ips_code is None
-    assert UsageRecordORM.client_id.default.arg == "default"
+    assert caller.site_code is None
+    assert UsageRecordORM.org_id.default.arg == "default"
+    assert UsageRecordORM.site_id.default.arg == "unknown"
 
     engine = EngineClient()
     assert engine._generate_simulated_clinical_response is not None

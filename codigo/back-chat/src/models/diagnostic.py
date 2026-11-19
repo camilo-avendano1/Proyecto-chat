@@ -31,7 +31,7 @@ class ChatRequest(BaseModel):
     )
     extras: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Metadatos o filtros opcionales específicos del cliente para la búsqueda RAG",
+        description="Metadatos o filtros opcionales específicos de la organización para la búsqueda RAG",
     )
     conversation_history: Optional[List[ChatMessage]] = Field(
         default_factory=list,
@@ -68,11 +68,17 @@ class ChatRequest(BaseModel):
             return self.user_context.permisos
         return None
 
-    def get_org_code(self) -> Optional[str]:
-        if self.user and self.user.organization:
-            return self.user.organization
-        if self.user_context and self.user_context.ips_code:
-            return self.user_context.ips_code
+    def get_site_code(self) -> Optional[str]:
+        if self.user:
+            if self.user.site_code:
+                return self.user.site_code
+            if self.user.organization:
+                return self.user.organization
+        if self.user_context:
+            if self.user_context.site_code:
+                return self.user_context.site_code
+            if self.user_context.ips_code:
+                return self.user_context.ips_code
         return None
 
     def get_context_dict(self) -> Dict[str, Any]:
@@ -94,9 +100,8 @@ class ChatRequest(BaseModel):
     def get_user_attributes(self) -> Dict[str, Any]:
         attrs: Dict[str, Any] = {}
         if self.user_context is not None:
-            for key in ("filial", "eps", "ips_code", "ips_nombre"):
-                value = getattr(self.user_context, key, None)
-                if value is not None:
+            for key, value in self.user_context.model_dump(exclude_none=True).items():
+                if key not in ("usuario", "permisos") and value is not None:
                     attrs[key] = value
             if self.user_context.model_extra:
                 for key, value in self.user_context.model_extra.items():
@@ -105,6 +110,8 @@ class ChatRequest(BaseModel):
         if self.user is not None:
             if self.user.organization is not None:
                 attrs["organization"] = self.user.organization
+            if self.user.site_code is not None:
+                attrs["site_code"] = self.user.site_code
             if self.user.attributes:
                 for key, value in self.user.attributes.items():
                     if value is not None:
@@ -162,8 +169,8 @@ class UsageSummaryResponse(BaseModel):
 
 class UserUsageResponse(BaseModel):
     usuario: str
-    tenant_id: str
-    client_id: Optional[str] = "default"
+    site_id: str
+    org_id: Optional[str] = "default"
     total_requests: int
     llm_requests: int
     fast_path_requests: int
@@ -173,9 +180,9 @@ class UserUsageResponse(BaseModel):
     total_cost_usd: float
 
 
-class TenantUsageResponse(BaseModel):
-    tenant_id: str
-    client_id: Optional[str] = "default"
+class SiteUsageResponse(BaseModel):
+    site_id: str
+    org_id: Optional[str] = "default"
     total_requests: int
     llm_requests: int
     fast_path_requests: int
@@ -190,10 +197,10 @@ class SecurityEventItemResponse(BaseModel):
     request_id: Optional[str] = None
     event_type: str
     severity: str
-    client_id: str
-    tenant_id: str
+    org_id: str
+    site_id: str
     usuario: str
-    ips_code: Optional[str] = None
+    site_code: Optional[str] = None
     ip_address: Optional[str] = None
     details: dict = Field(default_factory=dict)
     created_at: str
@@ -203,10 +210,10 @@ class MessageLogItemResponse(BaseModel):
     log_id: str
     request_id: Optional[str] = None
     direction: str
-    client_id: str
-    tenant_id: str
+    org_id: str
+    site_id: str
     usuario: str
-    ips_code: Optional[str] = None
+    site_code: Optional[str] = None
     content: str
     tokens: int
     costo_usd: float

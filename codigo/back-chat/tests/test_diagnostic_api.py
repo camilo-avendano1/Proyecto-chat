@@ -161,7 +161,7 @@ def test_chat_query_generic_enriched_payload(
     assert logs_resp.status_code == 200
     logs = logs_resp.json()
     assert len(logs) >= 2
-    assert any(item["ips_code"] == "SEDE_NORTE" for item in logs)
+    assert any(item["site_code"] == "SEDE_NORTE" for item in logs)
 
 
 def test_chat_query_missing_or_empty_query_returns_422(

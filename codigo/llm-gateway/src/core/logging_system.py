@@ -39,6 +39,7 @@ from sqlalchemy import (
     func,
     insert,
     select,
+    text,
 )
 from sqlalchemy.engine import Engine
 
@@ -133,10 +134,10 @@ security_events_table = Table(
     Column("service", String(50), index=True, nullable=False),
     Column("event_type", String(100), index=True, nullable=False),
     Column("severity", String(20), index=True, nullable=False),
-    Column("client_id", String(100), index=True),
-    Column("tenant_id", String(100), index=True),
+    Column("org_id", String(100), index=True),
+    Column("site_id", String(100), index=True),
     Column("usuario", String(255), index=True),
-    Column("ips_code", String(50)),
+    Column("site_code", String(50)),
     Column("ip_address", String(64)),
     Column("request_id", String(64), index=True),
     Column("details", JSON),
@@ -150,11 +151,11 @@ message_logs_table = Table(
     Column("log_id", String(36), unique=True, nullable=False),
     Column("service", String(50), index=True, nullable=False),
     Column("direction", String(20), index=True, nullable=False),
-    Column("client_id", String(100), index=True),
-    Column("tenant_id", String(100), index=True),
+    Column("org_id", String(100), index=True),
+    Column("site_id", String(100), index=True),
     Column("usuario", String(255), index=True),
     Column("rol", String(100), index=True),
-    Column("ips_code", String(50)),
+    Column("site_code", String(50)),
     Column("request_id", String(64), index=True),
     Column("content", Text),
     Column("tokens", Integer, default=0),
@@ -174,8 +175,8 @@ system_errors_table = Table(
     Column("error_type", String(100), index=True, nullable=False),
     Column("message", Text),
     Column("exception", Text),
-    Column("client_id", String(100), index=True),
-    Column("tenant_id", String(100), index=True),
+    Column("org_id", String(100), index=True),
+    Column("site_id", String(100), index=True),
     Column("usuario", String(255)),
     Column("request_id", String(64), index=True),
     Column("created_at", DateTime(timezone=True), index=True, nullable=False),
@@ -213,10 +214,53 @@ def create_logs_engine(database_url: str) -> Engine:
     return engine
 
 
+def _migrate_legacy_logs_sqlite(engine: Engine) -> None:
+    """Migra columnas heredadas client_id/tenant_id/ips_code -> org_id/site_id/site_code en SQLite."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    column_renames = (
+        ("client_id", "org_id"),
+        ("tenant_id", "site_id"),
+        ("ips_code", "site_code"),
+    )
+
+    with engine.begin() as conn:
+        for table_name in TABLES:
+            exists = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
+                {"t": table_name},
+            ).scalar()
+            if not exists:
+                continue
+
+            cols = {
+                row[1]
+                for row in conn.execute(text(f'PRAGMA table_info("{table_name}")')).fetchall()
+            }
+            for old_col, new_col in column_renames:
+                if old_col in cols and new_col not in cols:
+                    conn.execute(
+                        text(f'ALTER TABLE "{table_name}" RENAME COLUMN "{old_col}" TO "{new_col}"')
+                    )
+                    cols.remove(old_col)
+                    cols.add(new_col)
+
+            if "org_id" in cols:
+                conn.execute(
+                    text(f'CREATE INDEX IF NOT EXISTS "ix_{table_name}_org_id" ON "{table_name}" ("org_id")')
+                )
+            if "site_id" in cols:
+                conn.execute(
+                    text(f'CREATE INDEX IF NOT EXISTS "ix_{table_name}_site_id" ON "{table_name}" ("site_id")')
+                )
+
+
 class AuditLogStore:
     def __init__(self, database_url: str, batch_size: int = 200, max_queue: int = 10000):
         self.database_url = database_url
         self.engine = create_logs_engine(database_url)
+        _migrate_legacy_logs_sqlite(self.engine)
         logs_metadata.create_all(self.engine)
         self._batch_size = batch_size
         self._queue: "queue.Queue[Optional[tuple]]" = queue.Queue(maxsize=max_queue)
@@ -361,11 +405,11 @@ class AuditLogger:
         self,
         event_type: str,
         severity: str,
-        client_id: Optional[str] = "unknown",
-        tenant_id: Optional[str] = "unknown",
+        org_id: Optional[str] = "unknown",
+        site_id: Optional[str] = "unknown",
         usuario: Optional[str] = "unknown",
         details: Optional[Dict[str, Any]] = None,
-        ips_code: Optional[str] = None,
+        site_code: Optional[str] = None,
         ip_address: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -374,10 +418,10 @@ class AuditLogger:
             "service": self.service,
             "event_type": event_type,
             "severity": severity.upper(),
-            "client_id": client_id or "unknown",
-            "tenant_id": tenant_id or "unknown",
+            "org_id": org_id or "unknown",
+            "site_id": site_id or "unknown",
             "usuario": usuario or "unknown",
-            "ips_code": ips_code,
+            "site_code": site_code,
             "ip_address": ip_address,
             "request_id": request_id or request_id_ctx.get() or str(uuid.uuid4()),
             "details": details or {},
@@ -385,7 +429,8 @@ class AuditLogger:
         }
         msg = (
             f"[SECURITY-{row['severity']}] {event_type} | User: {row['usuario']} | "
-            f"Tenant: {row['tenant_id']} | Details: {json.dumps(row['details'], ensure_ascii=False, default=str)}"
+            f"Org: {row['org_id']} | Site: {row['site_id']} | "
+            f"Details: {json.dumps(row['details'], ensure_ascii=False, default=str)}"
         )
         extra = {"audit_data": {**row, "created_at": row["created_at"].isoformat()}, "request_id": row["request_id"]}
         if row["severity"] in ("CRITICAL", "HIGH"):
@@ -403,8 +448,8 @@ class AuditLogger:
         origin: Optional[str] = None,
         api_key_preview: Optional[str] = None,
         ip_address: Optional[str] = None,
-        client_id: str = "unknown",
-        tenant_id: str = "unknown",
+        org_id: str = "unknown",
+        site_id: str = "unknown",
         usuario: str = "unauthenticated",
         event_type: str = "AUTH_FAILURE",
         severity: str = "HIGH",
@@ -412,8 +457,8 @@ class AuditLogger:
         return self.log_security_event(
             event_type=event_type,
             severity=severity,
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             details={"reason": reason, "origin": origin, "api_key_preview": api_key_preview},
             ip_address=ip_address,
@@ -422,8 +467,8 @@ class AuditLogger:
     def log_message(
         self,
         direction: str,
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
         content: str,
         rol: Optional[str] = None,
@@ -432,18 +477,18 @@ class AuditLogger:
         latencia_ms: int = 0,
         status: str = "PROCESSED",
         model: Optional[str] = None,
-        ips_code: Optional[str] = None,
+        site_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         row = {
             "log_id": str(uuid.uuid4()),
             "service": self.service,
             "direction": direction,
-            "client_id": client_id,
-            "tenant_id": tenant_id,
+            "org_id": org_id,
+            "site_id": site_id,
             "usuario": usuario,
             "rol": rol,
-            "ips_code": ips_code,
+            "site_code": site_code,
             "request_id": request_id or request_id_ctx.get() or str(uuid.uuid4()),
             "content": (content or "")[: self.max_content_chars],
             "tokens": int(tokens or 0),
@@ -455,7 +500,7 @@ class AuditLogger:
         }
         tag = "MSG-IN" if direction == "INCOMING" else "MSG-OUT"
         message_logger.info(
-            f"[{tag}] Req: {row['request_id']} | Client: {client_id} | Tenant: {tenant_id} | User: {usuario} | "
+            f"[{tag}] Req: {row['request_id']} | Org: {org_id} | Site: {site_id} | User: {usuario} | "
             f"Status: {status} | Tokens: {row['tokens']} | Latency: {row['latencia_ms']}ms | Len: {len(content or '')}",
             extra={
                 "message_audit": {k: v for k, v in row.items() if k not in ("content", "created_at")},
@@ -465,20 +510,20 @@ class AuditLogger:
         self._persist("message_logs", row)
         return row
 
-    def log_message_in(self, client_id: str, tenant_id: str, usuario: str, content: str, **kwargs: Any) -> Dict[str, Any]:
+    def log_message_in(self, org_id: str, site_id: str, usuario: str, content: str, **kwargs: Any) -> Dict[str, Any]:
         kwargs.setdefault("status", "RECEIVED")
-        return self.log_message("INCOMING", client_id, tenant_id, usuario, content, **kwargs)
+        return self.log_message("INCOMING", org_id, site_id, usuario, content, **kwargs)
 
-    def log_message_out(self, client_id: str, tenant_id: str, usuario: str, content: str, **kwargs: Any) -> Dict[str, Any]:
+    def log_message_out(self, org_id: str, site_id: str, usuario: str, content: str, **kwargs: Any) -> Dict[str, Any]:
         kwargs.setdefault("status", "COMPLETED")
-        return self.log_message("OUTGOING", client_id, tenant_id, usuario, content, **kwargs)
+        return self.log_message("OUTGOING", org_id, site_id, usuario, content, **kwargs)
 
     def log_system_error(
         self,
         error_type: str,
         message: str,
-        client_id: str = "unknown",
-        tenant_id: str = "unknown",
+        org_id: str = "unknown",
+        site_id: str = "unknown",
         usuario: str = "system",
         request_id: Optional[str] = None,
         exception_str: Optional[str] = None,
@@ -489,14 +534,14 @@ class AuditLogger:
             "error_type": error_type,
             "message": (message or "")[: self.max_content_chars],
             "exception": exception_str,
-            "client_id": client_id,
-            "tenant_id": tenant_id,
+            "org_id": org_id,
+            "site_id": site_id,
             "usuario": usuario,
             "request_id": request_id or request_id_ctx.get(),
             "created_at": _utcnow(),
         }
         error_logger.error(
-            f"[SYS-ERROR] Type: {error_type} | User: {usuario} | Tenant: {tenant_id} | Msg: {message} | Exc: {exception_str}",
+            f"[SYS-ERROR] Type: {error_type} | Org: {org_id} | Site: {site_id} | User: {usuario} | Msg: {message} | Exc: {exception_str}",
             extra={"request_id": row["request_id"]},
         )
         self._persist("system_errors", row)

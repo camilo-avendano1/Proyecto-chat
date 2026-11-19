@@ -1,4 +1,4 @@
-"""Script de verificación rápida del flujo genérico multi-cliente (Handshake + Chat SSE)."""
+"""Script de verificación rápida del flujo genérico multi-organización (Handshake + Chat SSE)."""
 
 import json
 import httpx
@@ -53,8 +53,8 @@ def main() -> None:
     session = session_resp.json()
     token = session["session_token"]
     print(
-        f"✅ Sesión creada | client={session.get('client_id')} "
-        f"({session.get('client_name')}) | tenant={session.get('tenant_name')}"
+        f"✅ Sesión creada | org={session.get('org_id')} "
+        f"({session.get('org_name')}) | sede={session.get('site_name')}"
     )
 
     # 2. Chat en Streaming Mínimo (únicamente {"query": "..."})
@@ -72,8 +72,8 @@ def main() -> None:
         "user": {
             "id": "ana.martinez",
             "role": "ANALISTA_COMPRAS",
-            "organization": "División Operativa Central",
-            "unit_code": "CORP-01",
+            "organization": "Sede Operativa Central",
+            "site_code": "CORP-01",
         },
         "context": {
             "url": "https://portal.empresa.com/compras/ordenes",

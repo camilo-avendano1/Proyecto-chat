@@ -7,11 +7,11 @@ from pydantic import BaseModel, Field
 
 
 class CallerContext(BaseModel):
-    client_id: str = Field("default", description="Identificador de la empresa cliente")
-    tenant_id: str = Field("unknown", description="Identificador del tenant o filial")
+    org_id: str = Field("default", description="Identificador de la organización")
+    site_id: str = Field("unknown", description="Identificador de la sede o sitio")
     usuario: str = Field("anonimo", description="Identificador del usuario final o sistema")
-    rol: Optional[str] = Field(None, description="Rol o perfil del usuario en la plataforma cliente")
-    ips_code: Optional[str] = Field(None, description="Identificador opcional de sede, sucursal o unidad del cliente")
+    rol: Optional[str] = Field(None, description="Rol o perfil del usuario en la plataforma")
+    site_code: Optional[str] = Field(None, description="Identificador opcional de sede, sucursal o unidad de la organización")
     operacion: str = Field("CHAT_QUERY", description="Tipo de operación ejecutada")
     request_id: Optional[str] = Field(None, description="ID único correlacional de la petición")
     model_requested: Optional[str] = Field(None, description="Modelo específico solicitado opcional")
@@ -59,8 +59,8 @@ class UsageSummaryResponse(BaseModel):
 
 class UserUsageResponse(BaseModel):
     usuario: str
-    tenant_id: str
-    client_id: str
+    site_id: str
+    org_id: str
     rol: str
     total_requests: int
     llm_requests: int
@@ -71,9 +71,9 @@ class UserUsageResponse(BaseModel):
     total_cost_usd: float
 
 
-class TenantUsageResponse(BaseModel):
-    tenant_id: str
-    client_id: str
+class SiteUsageResponse(BaseModel):
+    site_id: str
+    org_id: str
     total_requests: int
     llm_requests: int
     fast_path_requests: int
@@ -81,12 +81,15 @@ class TenantUsageResponse(BaseModel):
     total_tokens_output: int
     total_tokens: int
     total_cost_usd: float
+    avg_latencia_ms: int = 0
 
 
 class RoleUsageResponse(BaseModel):
     rol: str
-    client_id: str
+    org_id: str
     total_requests: int
+    total_tokens_input: int = 0
+    total_tokens_output: int = 0
     total_tokens: int
     total_cost_usd: float
 
@@ -95,18 +98,32 @@ class ModelUsageResponse(BaseModel):
     model: str
     provider: str
     total_requests: int
+    total_tokens_input: int = 0
+    total_tokens_output: int = 0
     total_tokens: int
     total_cost_usd: float
+    avg_latencia_ms: int = 0
+
+
+class TimeseriesPointResponse(BaseModel):
+    date: str
+    total_requests: int
+    llm_requests: int
+    fast_path_requests: int
+    tokens_input: int
+    tokens_output: int
+    tokens_total: int
+    costo_usd: float
 
 
 class UsageRecordItemResponse(BaseModel):
     ledger_id: str
     request_id: Optional[str] = None
-    client_id: str
-    tenant_id: str
+    org_id: str
+    site_id: str
     usuario: str
     rol: Optional[str] = None
-    ips_code: Optional[str] = None
+    site_code: Optional[str] = None
     operacion: str
     tokens_input: int
     tokens_output: int

@@ -1,7 +1,6 @@
 """
 Router for Widget Session Handshake (auth-service).
 Endpoint: POST /api/v1/widget/session
-Preserves 100% compatibility with existing widget integration contracts.
 """
 
 from typing import Optional
@@ -21,12 +20,12 @@ router = APIRouter(prefix="/api/v1/widget", tags=["Widget Authentication"])
     response_model=SessionResponse,
     status_code=status.HTTP_200_OK,
     summary="Inicializar Sesión Segura del Widget",
-    description="Valida la API Key pública del Tenant/Empresa, verifica la lista blanca de dominios y emite el JWT de sesión."
+    description="Valida la API Key pública de la Sede/Organización, verifica la lista blanca de dominios y emite el JWT de sesión."
 )
 async def create_widget_session(
     request: Request,
     body: Optional[SessionCreateRequest] = Body(default=None),
-    x_widget_key: str = Header(..., alias="X-Widget-Key", description="API Key pública del Tenant o Empresa"),
+    x_widget_key: str = Header(..., alias="X-Widget-Key", description="API Key pública de la Sede"),
     db: Session = Depends(get_db),
 ):
     ip = get_client_ip(
@@ -39,18 +38,19 @@ async def create_widget_session(
         session = service.create_session(
             api_key=x_widget_key,
             origin=effective_origin,
-            client_id=body.client_id if body else None,
+            org_id=body.org_id if body else None,
             metadata=body.metadata if body else None,
-            eps_id=body.eps_id if body else None,
-            ips_code=body.ips_code if body else None,
+            site_code=body.site_code if body else None,
             ip_address=ip,
         )
         return SessionResponse(
             session_token=session.session_token,
-            client_id=session.client_id,
-            client_name=session.client_name,
-            tenant_id=session.tenant_id,
-            tenant_name=session.tenant_name,
+            org_id=session.org_id,
+            org_name=session.org_name,
+            site_id=session.site_id,
+            site_name=session.site_name,
+            site_code=session.site_code,
+            site_label=session.site_label,
             expires_in_seconds=session.expires_in_seconds,
         )
     except AuthenticationError as exc:

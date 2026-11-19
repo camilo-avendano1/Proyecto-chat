@@ -38,8 +38,9 @@ def init_test_db():
         # Record 1: Doctor query
         repo.record_usage(
             request_id="req-seed-1",
-            client_id="sigires",
-            tenant_id="tenant-sura",
+            org_id="sigires",
+            site_id="site-sura",
+            site_code="SC-SURA-01",
             usuario="dr_perez",
             rol="PERFIL_IPS_MEDICO",
             operacion="DIAGNOSTIC_QUERY",
@@ -58,8 +59,9 @@ def init_test_db():
         # Record 2: Auditor fast-path greeting
         repo.record_usage(
             request_id="req-seed-2",
-            client_id="sigires",
-            tenant_id="tenant-sura",
+            org_id="sigires",
+            site_id="site-sura",
+            site_code="SC-SURA-01",
             usuario="auditor_1",
             rol="PERFIL_EPS_AUDITOR",
             operacion="FAST_RESPONSE_GREETING",
@@ -78,8 +80,9 @@ def init_test_db():
         # Record 3: Another user from otra_empresa
         repo.record_usage(
             request_id="req-seed-3",
-            client_id="otra_empresa",
-            tenant_id="corp-div-1",
+            org_id="otra_empresa",
+            site_id="corp-site-1",
+            site_code="CORP-01",
             usuario="corp_user",
             rol="PERFIL_EMPRESA",
             operacion="DIAGNOSTIC_QUERY",
@@ -112,14 +115,14 @@ def internal_headers() -> dict:
 
 
 @pytest.fixture
-def superadmin_headers() -> dict:
+def global_admin_headers() -> dict:
     now = datetime.now(timezone.utc)
     token = jwt.encode(
         {
             "sub": "admin-1",
-            "username": "superadmin",
-            "role": "SUPERADMIN",
-            "client_id": None,
+            "username": "globaladmin",
+            "role": "GLOBAL_ADMIN",
+            "org_id": None,
             "aud": "saas-admin",
             "iss": "saas-auth-service",
             "exp": now + timedelta(hours=1),
@@ -135,14 +138,14 @@ def superadmin_headers() -> dict:
 
 
 @pytest.fixture
-def client_admin_headers() -> dict:
+def org_admin_headers() -> dict:
     now = datetime.now(timezone.utc)
     token = jwt.encode(
         {
             "sub": "admin-sigires-1",
             "username": "sigires_admin",
-            "role": "CLIENT_ADMIN",
-            "client_id": "sigires",
+            "role": "ORG_ADMIN",
+            "org_id": "sigires",
             "aud": "saas-admin",
             "iss": "saas-auth-service",
             "exp": now + timedelta(hours=1),

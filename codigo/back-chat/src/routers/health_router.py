@@ -3,7 +3,7 @@ Router for Healthchecks, System Status, Usage Observability, and Security Logs.
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from fastapi import APIRouter, Query, status
 import httpx
 
@@ -12,8 +12,8 @@ from src.infrastructure.security.audit_logger import audit_logger
 from src.models.diagnostic import (
     MessageLogItemResponse,
     SecurityEventItemResponse,
+    SiteUsageResponse,
     StatusResponse,
-    TenantUsageResponse,
     UsageSummaryResponse,
     UserUsageResponse,
 )
@@ -41,7 +41,7 @@ async def health_check() -> Dict[str, str]:
 )
 async def system_status() -> StatusResponse:
     # Check default Back - Busqueda connectivity
-    default_busqueda_url = settings.CLIENT_BUSQUEDA_URLS.get(
+    default_busqueda_url = settings.ORG_BUSQUEDA_URLS.get(
         "default", settings.BACK_BUSQUEDA_URL
     ).rstrip("/")
     busqueda_status = "unreachable (using local fallback)"
@@ -100,17 +100,17 @@ async def system_status() -> StatusResponse:
     response_model=UsageSummaryResponse,
     status_code=status.HTTP_200_OK,
     summary="Resumen de Consumo de Tokens (Ledger)",
-    description="Muestra el total de tokens procesados y costos acumulados, filtrable por tenant, usuario y cliente.",
+    description="Muestra el total de tokens procesados y costos acumulados, filtrable por sede, usuario y organización.",
 )
 async def get_usage_metrics(
-    tenant_id: Optional[str] = Query(None, description="Filtrar métricas por ID del Tenant"),
+    site_id: Optional[str] = Query(None, description="Filtrar métricas por ID de la Sede"),
     usuario: Optional[str] = Query(None, description="Filtrar métricas por nombre de usuario"),
-    client_id: Optional[str] = Query(None, description="Filtrar métricas por cliente"),
+    org_id: Optional[str] = Query(None, description="Filtrar métricas por organización"),
 ) -> UsageSummaryResponse:
     ledger_repo = get_ledger_repository()
     summary = await ledger_repo.get_usage_summary(
-        tenant_id=tenant_id,
-        client_id=client_id,
+        site_id=site_id,
+        org_id=org_id,
         usuario=usuario,
     )
     return UsageSummaryResponse(
@@ -131,27 +131,27 @@ async def get_usage_metrics(
     description="Permite auditar el gasto de tokens, llamadas al LLM y ahorro por fast-path agrupado por usuario.",
 )
 async def get_usage_by_user(
-    tenant_id: Optional[str] = Query(None, description="Filtrar por Tenant específico"),
-    client_id: Optional[str] = Query(None, description="Filtrar por Cliente específico"),
+    site_id: Optional[str] = Query(None, description="Filtrar por Sede específica"),
+    org_id: Optional[str] = Query(None, description="Filtrar por Organización específica"),
 ) -> List[UserUsageResponse]:
     ledger_repo = get_ledger_repository()
-    users_data = await ledger_repo.get_usage_by_user(tenant_id=tenant_id, client_id=client_id)
+    users_data = await ledger_repo.get_usage_by_user(site_id=site_id, org_id=org_id)
     return [UserUsageResponse(**u) for u in users_data]
 
 
 @router.get(
-    "/api/v1/usage/by-tenant",
-    response_model=List[TenantUsageResponse],
+    "/api/v1/usage/by-site",
+    response_model=List[SiteUsageResponse],
     status_code=status.HTTP_200_OK,
-    summary="Desglose de Consumo de Tokens por Tenant",
-    description="Permite auditar el gasto de tokens y facturación multi-tenant para cobro o cuotas.",
+    summary="Desglose de Consumo de Tokens por Sede",
+    description="Permite auditar el gasto de tokens y facturación multi-sede para cobro o cuotas.",
 )
-async def get_usage_by_tenant(
-    client_id: Optional[str] = Query(None, description="Filtrar por Cliente específico"),
-) -> List[TenantUsageResponse]:
+async def get_usage_by_site(
+    org_id: Optional[str] = Query(None, description="Filtrar por Organización específica"),
+) -> List[SiteUsageResponse]:
     ledger_repo = get_ledger_repository()
-    tenants_data = await ledger_repo.get_usage_by_tenant(client_id=client_id)
-    return [TenantUsageResponse(**t) for t in tenants_data]
+    sites_data = await ledger_repo.get_usage_by_site(org_id=org_id)
+    return [SiteUsageResponse(**s) for s in sites_data]
 
 
 @router.get(
@@ -162,14 +162,16 @@ async def get_usage_by_tenant(
     description="Consulta eventos de seguridad registrados: intentos de inyección, orígenes no autorizados y fallos de autenticación.",
 )
 async def get_security_audit_logs(
-    tenant_id: Optional[str] = Query(None, description="Filtrar por Tenant"),
+    site_id: Optional[str] = Query(None, description="Filtrar por Sede"),
+    org_id: Optional[str] = Query(None, description="Filtrar por Organización"),
     usuario: Optional[str] = Query(None, description="Filtrar por Usuario"),
     event_type: Optional[str] = Query(None, description="Tipo de evento de seguridad"),
     limit: int = Query(50, ge=1, le=500, description="Límite de registros a retornar"),
 ) -> List[SecurityEventItemResponse]:
     events = audit_logger.get_recent_security_events(
         limit=limit,
-        tenant_id=tenant_id,
+        site_id=site_id,
+        org_id=org_id,
         usuario=usuario,
         event_type=event_type,
     )
@@ -184,14 +186,16 @@ async def get_security_audit_logs(
     description="Historial detallado de mensajes entrantes y salientes sanitizados con métricas de tokens y latencia.",
 )
 async def get_message_audit_logs(
-    tenant_id: Optional[str] = Query(None, description="Filtrar por Tenant"),
+    site_id: Optional[str] = Query(None, description="Filtrar por Sede"),
+    org_id: Optional[str] = Query(None, description="Filtrar por Organización"),
     usuario: Optional[str] = Query(None, description="Filtrar por Usuario"),
     direction: Optional[str] = Query(None, description="Dirección: INCOMING o OUTGOING"),
     limit: int = Query(50, ge=1, le=500, description="Límite de registros a retornar"),
 ) -> List[MessageLogItemResponse]:
     logs = audit_logger.get_recent_message_logs(
         limit=limit,
-        tenant_id=tenant_id,
+        site_id=site_id,
+        org_id=org_id,
         usuario=usuario,
         direction=direction,
     )

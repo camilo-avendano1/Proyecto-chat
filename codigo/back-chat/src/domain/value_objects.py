@@ -29,12 +29,12 @@ class KnowledgeScope(str, Enum):
     """
     Multi-level knowledge scopes returned by the search microservice (back-busqueda):
     - GLOBAL: National/external regulations, technical annexes, clinical guidelines, standards
-    - ACCOUNT: Client platform operational manuals, form templates, validator catalogs
-    - TENANT: Specific institution/EPS/IPS overrides, local protocols, contract rules
+    - ORGANIZATION: Organization-wide operational manuals, form templates, validator catalogs
+    - SITE: Specific site/institution overrides, local protocols, contract rules
     """
     GLOBAL = "GLOBAL"
-    ACCOUNT = "ACCOUNT"
-    TENANT = "TENANT"
+    ORGANIZATION = "ORGANIZATION"
+    SITE = "SITE"
 
 
 class DocumentCategory(str, Enum):

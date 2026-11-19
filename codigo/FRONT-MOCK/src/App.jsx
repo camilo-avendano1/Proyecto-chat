@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
-import ContextSidebar, { TENANT_PRESETS } from './components/ContextSidebar';
+import ContextSidebar, { SITE_PRESETS } from './components/ContextSidebar';
 import ChatWindow from './components/ChatWindow';
 import TelemetryDrawer from './components/TelemetryDrawer';
 import ObservabilityModal from './components/ObservabilityModal';
@@ -51,8 +51,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('chat');
   const [showTelemetry, setShowTelemetry] = useState(true);
 
-  // Tenant & Session (Generic client by default)
-  const [tenantKey, setTenantKey] = useState('otra_empresa');
+  // Organization, Site & Session (Generic organization by default)
+  const [siteKey, setSiteKey] = useState('otra_empresa');
   const [sessionData, setSessionData] = useState(null);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
 
@@ -94,7 +94,7 @@ export default function App() {
 
   // Handshake to create or renew session
   const initSession = useCallback(async () => {
-    const preset = TENANT_PRESETS[tenantKey];
+    const preset = SITE_PRESETS[siteKey];
     if (!preset) return;
 
     setIsSessionLoading(true);
@@ -102,10 +102,9 @@ export default function App() {
       const session = await createSession({
         origin: window.location.origin,
         apiKey: preset.api_key,
-        clientId: preset.client_id,
+        orgId: preset.org_id,
         metadata: preset.metadata,
-        epsId: preset.eps_id,
-        ipsCode: preset.ips_code,
+        siteCode: preset.site_code,
       });
       setSessionData(session);
     } catch (err) {
@@ -114,7 +113,7 @@ export default function App() {
     } finally {
       setIsSessionLoading(false);
     }
-  }, [tenantKey]);
+  }, [siteKey]);
 
   // Initial status check & polling
   useEffect(() => {
@@ -123,7 +122,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [checkStatus]);
 
-  // Initialize session whenever tenant changes
+  // Initialize session whenever organization/site preset changes
   useEffect(() => {
     initSession();
   }, [initSession]);
@@ -137,13 +136,13 @@ export default function App() {
     setExtrasText(scenario.extras_json || '');
     setExtrasError('');
 
-    if (scenario.target_tenant && tenantKey !== scenario.target_tenant) {
-      setTenantKey(scenario.target_tenant);
+    if (scenario.target_site && siteKey !== scenario.target_site) {
+      setSiteKey(scenario.target_site);
     } else if (
-      scenario.target_tenant_group === 'sigires' &&
-      !['sura', 'sanitas', 'nuevaeps'].includes(tenantKey)
+      scenario.target_org === 'sigires' &&
+      !['sura', 'sanitas', 'nuevaeps'].includes(siteKey)
     ) {
-      setTenantKey('sura');
+      setSiteKey('sura');
     }
 
     if (scenario.context) {
@@ -182,14 +181,13 @@ export default function App() {
     let token = sessionData?.session_token;
     if (!token) {
       try {
-        const preset = TENANT_PRESETS[tenantKey];
+        const preset = SITE_PRESETS[siteKey];
         const newSession = await createSession({
           origin: window.location.origin,
           apiKey: preset.api_key,
-          clientId: preset.client_id,
+          orgId: preset.org_id,
           metadata: preset.metadata,
-          epsId: preset.eps_id,
-          ipsCode: preset.ips_code,
+          siteCode: preset.site_code,
         });
         setSessionData(newSession);
         token = newSession.session_token;
@@ -382,8 +380,8 @@ export default function App() {
       <div className={`main-workspace ${!showTelemetry ? 'drawer-collapsed' : ''}`}>
         {/* Left: Simulation & Context Panel */}
         <ContextSidebar
-          tenantKey={tenantKey}
-          setTenantKey={setTenantKey}
+          siteKey={siteKey}
+          setSiteKey={setSiteKey}
           minimalMode={minimalMode}
           setMinimalMode={setMinimalMode}
           sessionData={sessionData}

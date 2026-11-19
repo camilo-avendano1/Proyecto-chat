@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     PORT: int = 8002
     DEBUG: bool = True
 
-    # Base de datos propia del servicio (clientes, tenants, administradores)
+    # Base de datos propia del servicio (organizaciones, sedes, administradores)
     DATABASE_URL: str = f"sqlite:///{(SERVICE_DIR / 'data' / 'auth.db').as_posix()}"
 
     # Sistema de logs
@@ -58,14 +58,14 @@ class Settings(BaseSettings):
     ADMIN_MAX_FAILED_ATTEMPTS: int = 5
     ADMIN_LOCKOUT_MINUTES: int = 15
 
-    # SUPERADMIN inicial (solo se crea si no existe ningún administrador)
+    # GLOBAL_ADMIN inicial (solo se crea si no existe ningún administrador)
     BOOTSTRAP_ADMIN_USERNAME: str = "superadmin"
     BOOTSTRAP_ADMIN_PASSWORD: Optional[str] = None
 
-    # Datos de demostración (clientes SIGIRES / otra_empresa y sus tenants)
+    # Datos de demostración (organizaciones SIGIRES / otra_empresa y sus sedes)
     SEED_DEMO_DATA: bool = True
     DEFAULT_WIDGET_API_KEY: str = "pk_live_sigires_8f9a2b1c3d4e5f6a"
-    CLIENT_BUSQUEDA_URLS: Dict[str, str] = {
+    ORG_BUSQUEDA_URLS: Dict[str, str] = {
         "sigires": "http://localhost:8001",
         "default": "http://localhost:8001",
     }
@@ -74,8 +74,10 @@ class Settings(BaseSettings):
         "https://sigires.procex.co",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
     ]
 
     def validate_production_safety(self) -> None:

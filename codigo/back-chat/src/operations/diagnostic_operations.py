@@ -7,11 +7,11 @@ Executes the full pipeline:
 2. Inbound message audit & Security Guardrails check (Greetings, Injections, Out-of-Domain)
    - Fast-path for greetings & off-topic: 0 LLM tokens, instant response.
 3. Optional Log parsing & Error Diagnostic classification (only when error signals exist)
-4. Client-specific Knowledge retrieval via Back - Busqueda
+4. Organization-specific Knowledge retrieval via Back - Busqueda
 5. Contextual adaptive Prompt assembly with Hardened System Guardrails
 6. LLM streaming/sync inference (via LLM Gateway / OpenAI-compatible server)
 7. SSE event emission conforming to integration contract
-8. Outbound message audit and token ledger recording per User and Tenant
+8. Outbound message audit and token ledger recording per User and Site
 """
 
 import asyncio
@@ -39,7 +39,7 @@ from src.operations.sanitizer_operations import PIISanitizer
 
 
 class DiagnosticOperations:
-    """Core orchestration service for multi-client chat and diagnostic assistance."""
+    """Core orchestration service for multi-organization chat and diagnostic assistance."""
 
     def __init__(
         self,
@@ -57,10 +57,10 @@ class DiagnosticOperations:
         self,
         raw_query: str,
         raw_logs: Optional[str],
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
-        ips_code: Optional[str],
+        site_code: Optional[str],
         request_id: str,
     ) -> Tuple[str, Optional[str]]:
         if not self.enable_pii_scrubbing:
@@ -72,11 +72,11 @@ class DiagnosticOperations:
             audit_logger.log_security_event(
                 event_type="PII_MASKED_IN_PAYLOAD",
                 severity="LOW",
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 details={"field": "query_or_logs", "rule": "Ley 1581 de 2012"},
-                ips_code=ips_code,
+                site_code=site_code,
                 request_id=request_id,
             )
         return sanitized_query, sanitized_logs
@@ -84,11 +84,11 @@ class DiagnosticOperations:
     async def _record_interception(
         self,
         guardrail: GuardrailResult,
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
         effective_role: str,
-        ips_code: Optional[str],
+        site_code: Optional[str],
         request_id: str,
         query: str,
         start_time: float,
@@ -100,31 +100,31 @@ class DiagnosticOperations:
             audit_logger.log_security_event(
                 event_type="PROMPT_INJECTION_ATTEMPT",
                 severity="HIGH",
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 details={"query": query, "reason": guardrail.reason},
-                ips_code=ips_code,
+                site_code=site_code,
                 request_id=request_id,
             )
         elif guardrail.status == "OUT_OF_DOMAIN":
             audit_logger.log_security_event(
                 event_type="OUT_OF_DOMAIN_QUERY",
                 severity="MEDIUM",
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 details={"query": query},
-                ips_code=ips_code,
+                site_code=site_code,
                 request_id=request_id,
             )
 
         await self.ledger_repo.record_usage(
             UsageLedgerRecord(
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
-                ips_code=ips_code,
+                site_code=site_code,
                 operacion=guardrail.status,
                 tokens_input=0,
                 tokens_output=0,
@@ -140,8 +140,9 @@ class DiagnosticOperations:
         if hasattr(self.llm_service, "record_usage_event"):
             try:
                 await self.llm_service.record_usage_event(
-                    client_id=client_id,
-                    tenant_id=tenant_id,
+                    org_id=org_id,
+                    site_id=site_id,
+                    site_code=site_code,
                     usuario=usuario,
                     operacion=guardrail.status,
                     is_llm_call=False,
@@ -157,15 +158,15 @@ class DiagnosticOperations:
                 pass
 
         audit_logger.log_message_out(
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             content=direct_text,
             tokens=0,
             costo_usd=0.0,
             latencia_ms=latency_ms,
             status=guardrail.status,
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id,
             rol=effective_role,
         )
@@ -175,9 +176,9 @@ class DiagnosticOperations:
         request: ChatRequest,
         query: str,
         system_logs: Optional[str],
-        client_id: str,
-        client_name: str,
-        tenant_id: str,
+        org_id: str,
+        org_name: str,
+        site_id: str,
         busqueda_api_url: Optional[str],
         usuario: str,
         role: Optional[str],
@@ -193,9 +194,9 @@ class DiagnosticOperations:
 
         sources = await self.search_service.search(
             query=query,
-            client_id=client_id,
+            org_id=org_id,
             busqueda_api_url=busqueda_api_url,
-            tenant_id=tenant_id,
+            site_id=site_id,
             category=diagnostic.category if diagnostic else None,
             variable_num=diagnostic.affected_variable_number if diagnostic else None,
             error_code=diagnostic.detected_code if diagnostic else None,
@@ -205,8 +206,8 @@ class DiagnosticOperations:
 
         system_prompt = PromptBuilder.build_system_prompt(
             user_context=request.user_context,
-            client_id=client_id,
-            client_name=client_name,
+            org_id=org_id,
+            org_name=org_name,
             usuario=usuario,
             role=role,
             user_attributes=user_attrs,
@@ -218,7 +219,7 @@ class DiagnosticOperations:
             user_context=request.user_context,
             diagnostic=diagnostic,
             knowledge_sources=sources,
-            client_name=client_name,
+            org_name=org_name,
             context=context_dict,
             usuario=usuario,
             role=role,
@@ -233,11 +234,11 @@ class DiagnosticOperations:
 
     async def _finalize_usage_and_audit(
         self,
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
         effective_role: str,
-        ips_code: Optional[str],
+        site_code: Optional[str],
         operacion: str,
         request_id: str,
         query: str,
@@ -253,10 +254,10 @@ class DiagnosticOperations:
 
         await self.ledger_repo.record_usage(
             UsageLedgerRecord(
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
-                ips_code=ips_code,
+                site_code=site_code,
                 operacion=operacion,
                 tokens_input=tokens_in,
                 tokens_output=tokens_out,
@@ -270,15 +271,15 @@ class DiagnosticOperations:
         )
 
         audit_logger.log_message_out(
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             content=response_text,
             tokens=tokens_in + tokens_out,
             costo_usd=cost_usd,
             latencia_ms=latency_ms,
             status="COMPLETED",
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id,
             rol=effective_role,
         )
@@ -286,12 +287,12 @@ class DiagnosticOperations:
     async def execute_query(
         self,
         request: ChatRequest,
-        tenant_id: str,
-        client_id: str = "default",
+        site_id: str,
+        org_id: str = "default",
         busqueda_api_url: Optional[str] = None,
-        client_name: str = "la Plataforma",
+        org_name: str = "la Plataforma",
         session_metadata: Optional[Dict[str, Any]] = None,
-        session_org_code: Optional[str] = None,
+        session_site_code: Optional[str] = None,
     ) -> ChatQueryResponse:
         """Executes a synchronous chat or diagnostic query (non-streaming)."""
         start_time = time.perf_counter()
@@ -300,7 +301,7 @@ class DiagnosticOperations:
         usuario = request.get_usuario()
         role = request.get_role()
         effective_role = role or "usuario"
-        ips_code = request.get_org_code() or session_org_code
+        site_code = request.get_site_code() or session_site_code
         raw_logs = request.get_logs()
         context_dict = request.get_context_dict()
         user_attrs = {**(session_metadata or {}), **request.get_user_attributes()}
@@ -309,19 +310,19 @@ class DiagnosticOperations:
         query, system_logs = self._sanitize_inputs(
             raw_query=request.query,
             raw_logs=raw_logs,
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id,
         )
 
         audit_logger.log_message_in(
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             content=query,
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id,
             rol=effective_role,
         )
@@ -329,16 +330,16 @@ class DiagnosticOperations:
         guardrail = ChatGuardrails.evaluate(
             query=query,
             system_logs=system_logs,
-            client_name=client_name,
+            org_name=org_name,
         )
         if guardrail.is_intercepted:
             await self._record_interception(
                 guardrail=guardrail,
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 effective_role=effective_role,
-                ips_code=ips_code,
+                site_code=site_code,
                 request_id=request_id,
                 query=query,
                 start_time=start_time,
@@ -353,9 +354,9 @@ class DiagnosticOperations:
             request=request,
             query=query,
             system_logs=system_logs,
-            client_id=client_id,
-            client_name=client_name,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            org_name=org_name,
+            site_id=site_id,
             busqueda_api_url=busqueda_api_url,
             usuario=usuario,
             role=role,
@@ -368,21 +369,21 @@ class DiagnosticOperations:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             history=history,
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             rol=effective_role,
-            ips_code=ips_code,
+            site_code=site_code,
             operacion="CHAT_QUERY",
             request_id=request_id,
         )
 
         await self._finalize_usage_and_audit(
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             effective_role=effective_role,
-            ips_code=ips_code,
+            site_code=site_code,
             operacion="CHAT_QUERY",
             request_id=request_id,
             query=query,
@@ -411,12 +412,12 @@ class DiagnosticOperations:
     async def execute_stream(
         self,
         request: ChatRequest,
-        tenant_id: str,
-        client_id: str = "default",
+        site_id: str,
+        org_id: str = "default",
         busqueda_api_url: Optional[str] = None,
-        client_name: str = "la Plataforma",
+        org_name: str = "la Plataforma",
         session_metadata: Optional[Dict[str, Any]] = None,
-        session_org_code: Optional[str] = None,
+        session_site_code: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Executes a real-time chat or diagnostic stream emitting Server-Sent Events (SSE):
@@ -431,7 +432,7 @@ class DiagnosticOperations:
         usuario = request.get_usuario()
         role = request.get_role()
         effective_role = role or "usuario"
-        ips_code = request.get_org_code() or session_org_code
+        site_code = request.get_site_code() or session_site_code
         raw_logs = request.get_logs()
         context_dict = request.get_context_dict()
         user_attrs = {**(session_metadata or {}), **request.get_user_attributes()}
@@ -440,19 +441,19 @@ class DiagnosticOperations:
         query, system_logs = self._sanitize_inputs(
             raw_query=request.query,
             raw_logs=raw_logs,
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id,
         )
 
         audit_logger.log_message_in(
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             content=query,
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id,
             rol=effective_role,
         )
@@ -460,7 +461,7 @@ class DiagnosticOperations:
         guardrail = ChatGuardrails.evaluate(
             query=query,
             system_logs=system_logs,
-            client_name=client_name,
+            org_name=org_name,
         )
         if guardrail.is_intercepted:
             direct_text = guardrail.direct_response or ""
@@ -477,11 +478,11 @@ class DiagnosticOperations:
 
             await self._record_interception(
                 guardrail=guardrail,
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 effective_role=effective_role,
-                ips_code=ips_code,
+                site_code=site_code,
                 request_id=request_id,
                 query=query,
                 start_time=start_time,
@@ -492,9 +493,9 @@ class DiagnosticOperations:
             request=request,
             query=query,
             system_logs=system_logs,
-            client_id=client_id,
-            client_name=client_name,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            org_name=org_name,
+            site_id=site_id,
             busqueda_api_url=busqueda_api_url,
             usuario=usuario,
             role=role,
@@ -509,11 +510,11 @@ class DiagnosticOperations:
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 history=history,
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 rol=effective_role,
-                ips_code=ips_code,
+                site_code=site_code,
                 operacion="CHAT_STREAM",
                 request_id=request_id,
             ):
@@ -524,8 +525,8 @@ class DiagnosticOperations:
             audit_logger.log_system_error(
                 error_type="LLM_STREAM_ERROR",
                 message=str(e),
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 request_id=request_id,
             )
@@ -547,11 +548,11 @@ class DiagnosticOperations:
 
         full_text = "".join(full_text_accum)
         await self._finalize_usage_and_audit(
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             effective_role=effective_role,
-            ips_code=ips_code,
+            site_code=site_code,
             operacion="CHAT_STREAM",
             request_id=request_id,
             query=query,

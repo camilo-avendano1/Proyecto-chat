@@ -124,11 +124,18 @@ class ChatGuardrails:
     ]
 
     @classmethod
-    def evaluate(cls, query: str, system_logs: Optional[str] = None, client_name: str = "la Plataforma") -> GuardrailResult:
+    def evaluate(
+        cls,
+        query: str,
+        system_logs: Optional[str] = None,
+        org_name: str = "la Plataforma",
+        client_name: Optional[str] = None,
+    ) -> GuardrailResult:
         """
         Evaluates the message. Returns a GuardrailResult.
         If is_intercepted is True, caller MUST NOT query the LLM.
         """
+        effective_org_name = client_name or org_name
         clean_query = (query or "").strip()
 
         # Check 1: Security - Prompt Injections & Jailbreaks
@@ -140,7 +147,7 @@ class ChatGuardrails:
                     severity="HIGH",
                     reason="PROMPT_INJECTION_DETECTED",
                     direct_response=(
-                        f"Como Asistente Virtual de {client_name}, opero bajo estrictas "
+                        f"Como Asistente Virtual de {effective_org_name}, opero bajo estrictas "
                         "políticas de gobernanza y seguridad de la información. No tengo permitido "
                         "modificar mis directrices de comportamiento, ejecutar código o funciones externas, "
                         "ni atender instrucciones ajenas al soporte y documentación de la plataforma."
@@ -157,7 +164,7 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="GREETING_DETECTED",
                 direct_response=(
-                    f"¡Hola! Soy el Asistente Virtual de {client_name}.\n\n"
+                    f"¡Hola! Soy el Asistente Virtual de {effective_org_name}.\n\n"
                     "¿En qué puedo ayudarte hoy con procesos, documentación, validación de datos o soporte dentro de la plataforma?"
                 )
             )
@@ -169,7 +176,7 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="IDENTITY_INQUIRY",
                 direct_response=(
-                    f"Soy el Asistente Virtual de {client_name}.\n\n"
+                    f"Soy el Asistente Virtual de {effective_org_name}.\n\n"
                     "Puedo ayudarte a resolver dudas sobre procesos operativos, manuales, políticas, "
                     "flujos de trabajo y fallos técnicos en la plataforma. Indícame tu consulta o el detalle "
                     "del incidente y consultaré la documentación disponible para guiarte."
@@ -184,7 +191,7 @@ class ChatGuardrails:
                 reason="GRATITUDE_DETECTED",
                 direct_response=(
                     f"¡Con mucho gusto! Estoy disponible cuando necesites orientación sobre procesos, "
-                    f"documentación o soporte en {client_name}. ¡Que tengas un excelente día!"
+                    f"documentación o soporte en {effective_org_name}. ¡Que tengas un excelente día!"
                 )
             )
 
@@ -195,7 +202,7 @@ class ChatGuardrails:
                 severity="INFO",
                 reason="FAREWELL_DETECTED",
                 direct_response=(
-                    f"¡Hasta luego! Quedo a tu disposición cuando necesites ayuda con la plataforma {client_name}."
+                    f"¡Hasta luego! Quedo a tu disposición cuando necesites ayuda con la plataforma {effective_org_name}."
                 )
             )
 
@@ -207,7 +214,7 @@ class ChatGuardrails:
                 reason="AFFIRMATION_DETECTED",
                 direct_response=(
                     f"Entendido. Si tienes alguna consulta adicional sobre procesos, documentación o algún "
-                    f"incidente técnico en {client_name}, por favor indícamelo para ayudarte."
+                    f"incidente técnico en {effective_org_name}, por favor indícamelo para ayudarte."
                 )
             )
 
@@ -228,7 +235,7 @@ class ChatGuardrails:
                             severity="WARNING",
                             reason="OUT_OF_DOMAIN_QUERY",
                             direct_response=(
-                                f"Mi función como Asistente Virtual de {client_name} está enfocada "
+                                f"Mi función como Asistente Virtual de {effective_org_name} está enfocada "
                                 "exclusivamente en asistirte con procesos, documentación, soporte técnico y uso de la plataforma.\n\n"
                                 "No tengo permitido responder consultas sobre temas ajenos al entorno operativo. "
                                 "Si tienes alguna duda sobre un flujo, documento o incidente técnico, con gusto te asisto."

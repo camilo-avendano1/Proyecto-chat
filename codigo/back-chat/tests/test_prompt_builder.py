@@ -1,6 +1,6 @@
 """
 Unit tests for PromptBuilder operations.
-Verifies that the System Prompt defines only the technical assistant role for forms/formats/regulations
+Verifies that the System Prompt defines only the assistant role
 and that specific normative documents and situations are injected dynamically via the User Prompt (RAG).
 """
 
@@ -14,15 +14,14 @@ def test_build_system_prompt_for_doctor_and_nurse():
     doctor = UserContext(
         usuario="dr.carlos",
         eps="EPS_SURA",
-        ips_code="631300040301",
-        permisos="PERFIL_IPS_MEDICO"
+        site_code="631300040301",
+        permisos="PERFIL_IPS_MEDICO",
     )
-    prompt_doc = PromptBuilder.build_system_prompt(doctor, client_id="sigires", client_name="SIGIRES")
+    prompt_doc = PromptBuilder.build_system_prompt(doctor, org_id="sigires", org_name="SIGIRES")
     assert "Estimado Dr. dr.carlos" in prompt_doc
     assert "asistente virtual" in prompt_doc.lower()
     assert "documentación" in prompt_doc.lower()
     assert "rag" in prompt_doc.lower()
-    # Specific regulations must come from RAG search, not be hardcoded in the system prompt
     assert "118 variables" not in prompt_doc
     assert "Juan Camilo Avendaño" in prompt_doc
     assert "Fran Sneider Quincha" in prompt_doc
@@ -31,10 +30,10 @@ def test_build_system_prompt_for_doctor_and_nurse():
     nurse = UserContext(
         usuario="enf.laura",
         eps="EPS_SANITAS",
-        ips_code="110010999901",
-        permisos="PERFIL_IPS_ENFERMERO"
+        site_code="110010999901",
+        permisos="PERFIL_IPS_ENFERMERO",
     )
-    prompt_nurse = PromptBuilder.build_system_prompt(nurse, client_id="sigires", client_name="SIGIRES")
+    prompt_nurse = PromptBuilder.build_system_prompt(nurse, org_id="sigires", org_name="SIGIRES")
     assert "Enfermería enf.laura" in prompt_nurse
 
 
@@ -42,21 +41,21 @@ def test_build_system_prompt_for_auditor():
     user = UserContext(
         usuario="auditor.sura",
         eps="EPS_SURA",
-        ips_code="631300040301",
-        permisos="PERFIL_EPS_AUDITOR"
+        site_code="631300040301",
+        permisos="PERFIL_EPS_AUDITOR",
     )
-    prompt = PromptBuilder.build_system_prompt(user, client_id="sigires")
+    prompt = PromptBuilder.build_system_prompt(user, org_id="sigires")
     assert "Estimado Auditor (EPS_SURA)" in prompt
 
 
-def test_build_system_prompt_for_other_client():
+def test_build_system_prompt_for_other_org():
     user = UserContext(
         usuario="analista1",
         eps="CORP_SALUD",
-        ips_code="100200",
-        permisos="PERFIL_ANALISTA"
+        site_code="100200",
+        permisos="PERFIL_ANALISTA",
     )
-    prompt = PromptBuilder.build_system_prompt(user, client_id="otra_empresa", client_name="Clínica Central")
+    prompt = PromptBuilder.build_system_prompt(user, org_id="otra_empresa", org_name="Clínica Central")
     assert "Clínica Central" in prompt
     assert "Juan Camilo Avendaño" in prompt
     assert "Fran Sneider Quincha" in prompt
@@ -73,22 +72,22 @@ def test_build_user_prompt_injects_search_documents_and_context():
     user = UserContext(
         usuario="enf.maria",
         eps="EPS_SANITAS",
-        ips_code="631300040301",
-        permisos="PERFIL_IPS_ENFERMERO"
+        site_code="631300040301",
+        permisos="PERFIL_IPS_ENFERMERO",
     )
     diag = ErrorDiagnostic(
         detected_code="CE_VAR_014_INVAL",
         error_phase=ErrorPhase.FASE_2_CE,
         affected_variable_number=14,
         affected_variable_name="Condicion_Usuaria",
-        affected_row=45
+        affected_row=45,
     )
     sources = [
         KnowledgeSource(
             document_title="Reglamento Técnico de Formularios",
             scope=KnowledgeScope.GLOBAL,
             section="Sección Campo 14",
-            snippet="Regla recuperada dinámicamente desde el servicio de búsqueda"
+            snippet="Regla recuperada dinámicamente desde el servicio de búsqueda",
         )
     ]
 

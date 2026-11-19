@@ -7,8 +7,8 @@ class DomainException(Exception):
     pass
 
 
-class TenantNotFoundException(DomainException):
-    """Raised when tenant/EPS cannot be resolved."""
+class SiteNotFoundException(DomainException):
+    """Raised when site cannot be resolved."""
     pass
 
 
@@ -18,7 +18,7 @@ class InvalidApiKeyException(DomainException):
 
 
 class UnauthorizedOriginException(DomainException):
-    """Raised when request origin is not in the tenant's domain whitelist."""
+    """Raised when request origin is not in the site's domain whitelist."""
     pass
 
 

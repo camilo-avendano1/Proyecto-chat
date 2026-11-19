@@ -22,7 +22,7 @@ import {
   fetchAdminMessageLogs,
   fetchAdminUsageSummary,
   fetchAdminUsageByUser,
-  fetchAdminUsageByTenant,
+  fetchAdminUsageBySite,
   fetchAdminUsageByRole,
   fetchAdminUsageByModel,
   fetchUsageSummary, 
@@ -50,14 +50,14 @@ export default function ObservabilityModal({ activeTab, onClose }) {
 
   // Tab View State: 'usage', 'security', 'messages', 'roles_models'
   const [currentView, setCurrentView] = useState(activeTab === 'security' ? 'security' : 'usage');
-  const [subTab, setSubTab] = useState('summary'); // 'summary', 'roles', 'models', 'tenants'
+  const [subTab, setSubTab] = useState('summary'); // 'summary', 'roles', 'models', 'sites'
 
   // Data States
   const [summary, setSummary] = useState(null);
   const [userUsage, setUserUsage] = useState([]);
   const [roleUsage, setRoleUsage] = useState([]);
   const [modelUsage, setModelUsage] = useState([]);
-  const [tenantUsage, setTenantUsage] = useState([]);
+  const [siteUsage, setSiteUsage] = useState([]);
   const [securityLogs, setSecurityLogs] = useState([]);
   const [messageLogs, setMessageLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -68,7 +68,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
     setIsLoggingIn(true);
     try {
       const data = await adminLogin({ username: loginUsername, password: loginPassword });
-      const userObj = data.user || { username: data.username, role: data.role, client_id: data.client_id };
+      const userObj = data.user || { username: data.username, role: data.role, org_id: data.org_id };
       setAdminToken(data.access_token);
       setAdminUser(userObj);
       sessionStorage.setItem('saas_admin_token', data.access_token);
@@ -93,18 +93,18 @@ export default function ObservabilityModal({ activeTab, onClose }) {
       if (adminToken) {
         // Authenticated Admin Flow (Gateway :8003 and Central Logs DB)
         if (currentView === 'usage') {
-          const [sum, users, roles, models, tenants] = await Promise.all([
+          const [sum, users, roles, models, sites] = await Promise.all([
             fetchAdminUsageSummary({ token: adminToken }).catch(() => null),
             fetchAdminUsageByUser({ token: adminToken }).catch(() => []),
             fetchAdminUsageByRole({ token: adminToken }).catch(() => []),
             fetchAdminUsageByModel({ token: adminToken }).catch(() => []),
-            fetchAdminUsageByTenant({ token: adminToken }).catch(() => []),
+            fetchAdminUsageBySite({ token: adminToken }).catch(() => []),
           ]);
           setSummary(sum);
           setUserUsage(Array.isArray(users) ? users : []);
           setRoleUsage(Array.isArray(roles) ? roles : []);
           setModelUsage(Array.isArray(models) ? models : []);
-          setTenantUsage(Array.isArray(tenants) ? tenants : []);
+          setSiteUsage(Array.isArray(sites) ? sites : []);
         } else if (currentView === 'security') {
           const sec = await fetchAdminSecurityLogs({ token: adminToken }).catch(() => ({ records: [] }));
           setSecurityLogs(sec.records || []);
@@ -186,15 +186,22 @@ export default function ObservabilityModal({ activeTab, onClose }) {
               }}>
                 <UserCheck size={14} style={{ color: '#34d399' }} />
                 <span><strong>{adminUser.username}</strong></span>
-                <span style={{ 
-                  background: adminUser.role === 'SUPERADMIN' ? 'rgba(99, 102, 241, 0.25)' : 'rgba(16, 185, 129, 0.25)',
-                  color: adminUser.role === 'SUPERADMIN' ? '#a5b4fc' : '#34d399',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  fontWeight: 600,
-                  fontSize: '0.7rem'
-                }}>
-                  {adminUser.role}
+                <span
+                  title={adminUser.role}
+                  style={{ 
+                    background: adminUser.role === 'GLOBAL_ADMIN' ? 'rgba(99, 102, 241, 0.25)' : 'rgba(16, 185, 129, 0.25)',
+                    color: adminUser.role === 'GLOBAL_ADMIN' ? '#a5b4fc' : '#34d399',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    fontSize: '0.7rem'
+                  }}
+                >
+                  {adminUser.role === 'GLOBAL_ADMIN'
+                    ? 'Admin Global'
+                    : adminUser.role === 'ORG_ADMIN'
+                    ? 'Admin Organización'
+                    : adminUser.role}
                 </span>
                 <button 
                   onClick={handleLogout} 
@@ -241,7 +248,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                     setLoginPassword('AdminPassword2026!');
                   }}
                 >
-                  Preset: Superadmin
+                  Preset: Admin Global
                 </button>
                 <button 
                   type="button"
@@ -324,11 +331,11 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                   <div className="metric-value" style={{ color: '#34d399' }}>
                     ${summary?.total_cost_usd?.toFixed(6) || '0.000000'}
                   </div>
-                  <div className="metric-sub">Tarifa multi-tenant ponderada</div>
+                  <div className="metric-sub">Tarifa multi-organización ponderada</div>
                 </div>
 
                 <div className="metric-card">
-                  <div className="metric-title">Ahorro Fast-Path</div>
+                  <div className="metric-title">Respuestas directas</div>
                   <div className="metric-value" style={{ color: '#60a5fa' }}>
                     {summary?.saved_fast_path_calls || 0}
                   </div>
@@ -341,7 +348,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                     {summary?.total_records || 0}
                   </div>
                   <div className="metric-sub">
-                    LLM: {summary?.total_llm_calls ?? '-'} | Direct: {summary?.saved_fast_path_calls ?? '-'}
+                    LLM: {summary?.total_llm_calls ?? '-'} | Directas: {summary?.saved_fast_path_calls ?? '-'}
                   </div>
                 </div>
               </div>
@@ -370,11 +377,11 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                   Modelos & Proveedor ({modelUsage.length})
                 </button>
                 <button 
-                  className={`btn-secondary ${subTab === 'tenants' ? 'active' : ''}`}
-                  onClick={() => setSubTab('tenants')}
-                  style={{ fontSize: '0.78rem', background: subTab === 'tenants' ? 'var(--primary-color)' : '' }}
+                  className={`btn-secondary ${subTab === 'sites' ? 'active' : ''}`}
+                  onClick={() => setSubTab('sites')}
+                  style={{ fontSize: '0.78rem', background: subTab === 'sites' ? 'var(--primary-color)' : '' }}
                 >
-                  Por Empresa / División ({tenantUsage.length})
+                  Por Organización / Sede ({siteUsage.length})
                 </button>
               </div>
 
@@ -385,10 +392,10 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                     <thead>
                       <tr>
                         <th>Usuario</th>
-                        <th>Tenant ID</th>
+                        <th>Sede ID</th>
                         <th>Total Req</th>
                         <th>Llamadas LLM</th>
-                        <th>Fast-Path</th>
+                        <th>Respuestas directas</th>
                         <th>Tokens In/Out</th>
                         <th>Costo (USD)</th>
                       </tr>
@@ -405,7 +412,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                           <tr key={i}>
                             <td style={{ fontWeight: 600 }}>{u.usuario}</td>
                             <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                              {u.tenant_id ? u.tenant_id.slice(0, 16) + '...' : 'default'}
+                              {u.site_id ? (u.site_id.length > 16 ? `${u.site_id.slice(0, 16)}...` : u.site_id) : 'default'}
                             </td>
                             <td>{u.total_requests}</td>
                             <td>{u.llm_requests ?? u.total_requests}</td>
@@ -496,34 +503,34 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                 </div>
               )}
 
-              {/* Subtab: By Tenant */}
-              {subTab === 'tenants' && (
+              {/* Subtab: By Site */}
+              {subTab === 'sites' && (
                 <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.25)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>División / Tenant ID</th>
-                        <th>Empresa / Cliente</th>
+                        <th>Sede ID</th>
+                        <th>Organización</th>
                         <th>Total Peticiones</th>
                         <th>Tokens Consumidos</th>
                         <th>Costo Acumulado (USD)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {tenantUsage.length === 0 ? (
+                      {siteUsage.length === 0 ? (
                         <tr>
                           <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)' }}>
-                            No hay datos por tenant.
+                            No hay datos por organización / sede.
                           </td>
                         </tr>
                       ) : (
-                        tenantUsage.map((t, i) => (
+                        siteUsage.map((s, i) => (
                           <tr key={i}>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem' }}>{t.tenant_id}</td>
-                            <td style={{ fontWeight: 600 }}>{t.client_id}</td>
-                            <td>{t.total_requests}</td>
-                            <td>{t.total_tokens}</td>
-                            <td style={{ color: '#34d399', fontWeight: 600 }}>${(t.total_cost_usd || 0).toFixed(6)}</td>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem' }}>{s.site_id}</td>
+                            <td style={{ fontWeight: 600 }}>{s.org_id}</td>
+                            <td>{s.total_requests}</td>
+                            <td>{s.total_tokens}</td>
+                            <td style={{ color: '#34d399', fontWeight: 600 }}>${(s.total_cost_usd || 0).toFixed(6)}</td>
                           </tr>
                         ))
                       )}
@@ -555,7 +562,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                       <th>Tipo de Evento</th>
                       <th>Severidad</th>
                       <th>Usuario</th>
-                      <th>Empresa / Tenant</th>
+                      <th>Organización / Sede</th>
                       <th>Detalles</th>
                     </tr>
                   </thead>
@@ -604,7 +611,7 @@ export default function ObservabilityModal({ activeTab, onClose }) {
                           </td>
                           <td>{log.usuario}</td>
                           <td style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                            {log.client_id || 'default'} / {log.tenant_id ? log.tenant_id.slice(0, 8) : 'default'}
+                            {log.org_id || 'default'} / {log.site_id ? log.site_id.slice(0, 8) : 'default'}
                           </td>
                           <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={JSON.stringify(log.details)}>
                             {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}

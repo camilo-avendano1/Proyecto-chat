@@ -54,7 +54,7 @@ def require_admin_or_internal(
     Returns token payload or internal service context.
     """
     if x_internal_key and x_internal_key == settings.INTERNAL_SERVICE_KEY:
-        return {"sub": "internal", "role": "INTERNAL_SERVICE", "client_id": None}
+        return {"sub": "internal", "role": "INTERNAL_SERVICE", "org_id": None}
 
     if credentials and credentials.credentials:
         token = credentials.credentials

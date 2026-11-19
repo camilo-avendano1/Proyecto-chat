@@ -7,20 +7,19 @@ import os
 os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
 
 import jwt
-import pytest
 from fastapi.testclient import TestClient
 
 from src.config import settings
 from src.core.audit import audit_logger
 
 
-def _generate_admin_token(role: str = "SUPERADMIN", client_id: str = "sigires", username: str = "admin_test") -> str:
+def _generate_admin_token(role: str = "GLOBAL_ADMIN", org_id: str | None = "sigires", username: str = "admin_test") -> str:
     payload = {
         "sub": "user_admin_001",
         "username": username,
         "email": f"{username}@saas.com",
         "role": role,
-        "client_id": client_id,
+        "org_id": org_id,
         "aud": settings.ADMIN_TOKEN_AUDIENCE,
         "typ": "admin",
     }
@@ -32,19 +31,18 @@ def test_admin_logs_unauthorized_without_token(client: TestClient):
     assert resp.status_code == 401
 
 
-def test_admin_logs_security_query_superadmin(client: TestClient):
-    # Log a dummy security event to the central store
+def test_admin_logs_security_query_global_admin(client: TestClient):
     audit_logger.log_security_event(
         event_type="TEST_ADMIN_QUERY_EVENT",
         severity="HIGH",
-        client_id="sigires",
-        tenant_id="tenant_alpha",
+        org_id="sigires",
+        site_id="site_alpha",
         usuario="test_actor",
         details={"test": "ok"},
     )
     audit_logger.flush()
 
-    token = _generate_admin_token(role="SUPERADMIN")
+    token = _generate_admin_token(role="GLOBAL_ADMIN")
     resp = client.get(
         "/api/v1/admin/logs/security?event_type=TEST_ADMIN_QUERY_EVENT",
         headers={"Authorization": f"Bearer {token}"},
@@ -58,15 +56,15 @@ def test_admin_logs_security_query_superadmin(client: TestClient):
 def test_admin_logs_messages_query(client: TestClient):
     audit_logger.log_message(
         direction="INCOMING",
-        client_id="sigires",
-        tenant_id="tenant_alpha",
+        org_id="sigires",
+        site_id="site_alpha",
         usuario="dr_test",
         content="Consulta de prueba para auditoria central",
         rol="medico",
     )
     audit_logger.flush()
 
-    token = _generate_admin_token(role="SUPERADMIN")
+    token = _generate_admin_token(role="GLOBAL_ADMIN")
     resp = client.get(
         "/api/v1/admin/logs/messages",
         headers={"Authorization": f"Bearer {token}"},
@@ -77,12 +75,12 @@ def test_admin_logs_messages_query(client: TestClient):
     assert len(data["records"]) >= 1
 
 
-def test_admin_logs_client_admin_scoped(client: TestClient):
-    token = _generate_admin_token(role="CLIENT_ADMIN", client_id="otra_empresa", username="client_admin_test")
+def test_admin_logs_org_admin_scoped(client: TestClient):
+    token = _generate_admin_token(role="ORG_ADMIN", org_id="otra_empresa", username="org_admin_test")
     resp = client.get(
-        "/api/v1/admin/logs/security",
+        "/api/v1/admin/logs/security?org_id=sigires",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["client_id_scoped"] == "otra_empresa"
+    assert data["org_id_scoped"] == "otra_empresa"

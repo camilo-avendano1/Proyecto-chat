@@ -20,7 +20,7 @@ class LLMGatewayClient(LLMServiceProtocol):
     """
     HTTP client for the dedicated LLM Gateway service.
     Segregates inference, security authentication via X-Internal-Key,
-    and forwards caller attribution (client, tenant, user, role).
+    and forwards caller attribution (org, site, user, role).
     """
 
     def __init__(
@@ -50,12 +50,12 @@ class LLMGatewayClient(LLMServiceProtocol):
             "user_prompt": user_prompt,
             "history": history or [],
             "caller": {
-                "client_id": kwargs.get("client_id", "default"),
-                "tenant_id": kwargs.get("tenant_id", "default"),
+                "org_id": kwargs.get("org_id", "default"),
+                "site_id": kwargs.get("site_id", "default"),
+                "site_code": kwargs.get("site_code"),
                 "usuario": kwargs.get("usuario", "anonimo"),
                 "rol": kwargs.get("rol", "usuario"),
                 "operacion": kwargs.get("operacion", "CHAT_QUERY"),
-                "ips_code": kwargs.get("ips_code"),
                 "request_id": kwargs.get("request_id"),
                 "model_requested": kwargs.get("model_requested"),
             },
@@ -105,12 +105,12 @@ class LLMGatewayClient(LLMServiceProtocol):
             "user_prompt": user_prompt,
             "history": history or [],
             "caller": {
-                "client_id": kwargs.get("client_id", "default"),
-                "tenant_id": kwargs.get("tenant_id", "default"),
+                "org_id": kwargs.get("org_id", "default"),
+                "site_id": kwargs.get("site_id", "default"),
+                "site_code": kwargs.get("site_code"),
                 "usuario": kwargs.get("usuario", "anonimo"),
                 "rol": kwargs.get("rol", "usuario"),
                 "operacion": kwargs.get("operacion", "CHAT_STREAM"),
-                "ips_code": kwargs.get("ips_code"),
                 "request_id": kwargs.get("request_id"),
                 "model_requested": kwargs.get("model_requested"),
             },
@@ -165,8 +165,8 @@ class LLMGatewayClient(LLMServiceProtocol):
 
     async def record_usage_event(
         self,
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
         operacion: str,
         is_llm_call: bool = False,
@@ -176,13 +176,15 @@ class LLMGatewayClient(LLMServiceProtocol):
         latencia_ms: int = 0,
         rol: str = "usuario",
         status: str = "COMPLETED",
+        site_code: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> None:
         """Notifica al gateway de un evento que no consumió LLM (guardrails / fast-path)."""
         payload = {
             "caller": {
-                "client_id": client_id,
-                "tenant_id": tenant_id,
+                "org_id": org_id,
+                "site_id": site_id,
+                "site_code": site_code,
                 "usuario": usuario,
                 "rol": rol,
                 "operacion": operacion,

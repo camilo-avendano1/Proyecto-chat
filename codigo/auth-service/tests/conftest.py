@@ -19,7 +19,7 @@ os.environ["SEED_DEMO_DATA"] = "true"
 
 from src.main import app
 from src.dependencies import get_db_instance
-from src.db.seed import seed_demo_data, bootstrap_superadmin
+from src.db.seed import seed_demo_data, bootstrap_global_admin
 from src.config import settings
 
 
@@ -29,7 +29,7 @@ def init_test_db():
     db.create_all()
     with next(db.session()) as session:
         seed_demo_data(session, settings)
-        bootstrap_superadmin(session, settings)
+        bootstrap_global_admin(session, settings)
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def client() -> TestClient:
 
 
 @pytest.fixture
-def superadmin_token(client: TestClient) -> str:
+def global_admin_token(client: TestClient) -> str:
     res = client.post("/api/v1/admin/auth/login", json={
         "username": "testadmin",
         "password": "TestAdminPass2026!",

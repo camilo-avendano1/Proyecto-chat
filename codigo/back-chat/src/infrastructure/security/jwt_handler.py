@@ -69,8 +69,8 @@ class JWTHandler:
             audit_logger.log_security_event(
                 event_type="JWT_TOKEN_EXPIRED",
                 severity="MEDIUM",
-                client_id="unknown",
-                tenant_id="unknown",
+                org_id="unknown",
+                site_id="unknown",
                 usuario="unknown",
                 details={"reason": "Signature has expired"},
             )
@@ -82,8 +82,8 @@ class JWTHandler:
             audit_logger.log_security_event(
                 event_type="JWT_TOKEN_INVALID_OR_TAMPERED",
                 severity="HIGH",
-                client_id="unknown",
-                tenant_id="unknown",
+                org_id="unknown",
+                site_id="unknown",
                 usuario="unknown",
                 details={"reason": str(last_error)},
             )
@@ -108,8 +108,8 @@ class JWTHandler:
             audit_logger.log_security_event(
                 event_type="ADMIN_TOKEN_EXPIRED",
                 severity="MEDIUM",
-                client_id="unknown",
-                tenant_id="unknown",
+                org_id="unknown",
+                site_id="unknown",
                 usuario="admin",
                 details={"reason": "Signature has expired"},
             )
@@ -121,8 +121,8 @@ class JWTHandler:
             audit_logger.log_security_event(
                 event_type="ADMIN_TOKEN_INVALID",
                 severity="HIGH",
-                client_id="unknown",
-                tenant_id="unknown",
+                org_id="unknown",
+                site_id="unknown",
                 usuario="admin",
                 details={"reason": str(e)},
             )
@@ -147,8 +147,8 @@ async def get_current_session(
         audit_logger.log_security_event(
             event_type="MISSING_BEARER_AUTHORIZATION",
             severity="MEDIUM",
-            client_id="unknown",
-            tenant_id="unknown",
+            org_id="unknown",
+            site_id="unknown",
             usuario="unknown",
             details={"endpoint": "protected_diagnostic"},
         )
@@ -171,8 +171,8 @@ async def get_current_admin(
         audit_logger.log_security_event(
             event_type="MISSING_ADMIN_AUTHORIZATION",
             severity="HIGH",
-            client_id="unknown",
-            tenant_id="unknown",
+            org_id="unknown",
+            site_id="unknown",
             usuario="unauthenticated_admin",
             details={"endpoint": "admin_panel"},
         )

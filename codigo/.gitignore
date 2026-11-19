@@ -1,4 +1,6 @@
 # Hereda reglas para ejecución dentro de /codigo
+.agents/
+.claude/
 .env
 .env.*
 !.env.example

@@ -1,10 +1,10 @@
 """
 Router for Administrator Observability: Security Audit Logs, Message Traces, and AI Usage.
-Protected by get_current_admin with strict role isolation (SUPERADMIN vs CLIENT_ADMIN).
+Protected by get_current_admin with strict role isolation (GLOBAL_ADMIN vs ORG_ADMIN).
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import httpx
 
@@ -15,19 +15,22 @@ from src.infrastructure.security.jwt_handler import get_current_admin
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin Observability & Logs"])
 
 
-def _apply_role_scope(admin: Dict[str, Any], client_id: Optional[str]) -> Optional[str]:
+def _apply_role_scope(admin: Dict[str, Any], org_id: Optional[str]) -> Optional[str]:
     """
-    Enforces tenant/client isolation:
-    - SUPERADMIN can view any client_id or all.
-    - CLIENT_ADMIN is strictly locked to its own client_id.
+    Enforces organization isolation:
+    - GLOBAL_ADMIN can query any org_id or all.
+    - ORG_ADMIN is strictly locked to its own org_id.
     """
-    role = admin.get("role", "CLIENT_ADMIN")
-    admin_client = admin.get("client_id")
-    if role == "SUPERADMIN":
-        return client_id
-    if admin_client:
-        return admin_client
-    return client_id
+    role = admin.get("role", "ORG_ADMIN")
+    if role == "GLOBAL_ADMIN":
+        return org_id
+    admin_org = admin.get("org_id")
+    if not admin_org:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El token de administrador no tiene org_id asociado.",
+        )
+    return admin_org
 
 
 @router.get(
@@ -36,8 +39,8 @@ def _apply_role_scope(admin: Dict[str, Any], client_id: Optional[str]) -> Option
     description="Consulta eventos de seguridad (bloqueos, fallos de auth, inyecciones) desde la base central de logs.",
 )
 async def get_security_logs(
-    client_id: Optional[str] = Query(None, description="Filtrar por Empresa/Cliente"),
-    tenant_id: Optional[str] = Query(None, description="Filtrar por División/Tenant"),
+    org_id: Optional[str] = Query(None, description="Filtrar por Organización"),
+    site_id: Optional[str] = Query(None, description="Filtrar por Sede"),
     usuario: Optional[str] = Query(None, description="Filtrar por Usuario"),
     event_type: Optional[str] = Query(None, description="Tipo de evento"),
     severity: Optional[str] = Query(None, description="Severidad: LOW, MEDIUM, HIGH, CRITICAL"),
@@ -45,13 +48,13 @@ async def get_security_logs(
     offset: int = Query(0, ge=0),
     admin: Dict[str, Any] = Depends(get_current_admin),
 ) -> Dict[str, Any]:
-    scoped_client = _apply_role_scope(admin, client_id)
+    scoped_org = _apply_role_scope(admin, org_id)
 
     filters: Dict[str, Any] = {}
-    if scoped_client:
-        filters["client_id"] = scoped_client
-    if tenant_id:
-        filters["tenant_id"] = tenant_id
+    if scoped_org:
+        filters["org_id"] = scoped_org
+    if site_id:
+        filters["site_id"] = site_id
     if usuario:
         filters["usuario"] = usuario
     if event_type:
@@ -66,7 +69,7 @@ async def get_security_logs(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "client_id_scoped": scoped_client,
+        "org_id_scoped": scoped_org,
         "records": records,
     }
 
@@ -77,21 +80,21 @@ async def get_security_logs(
     description="Consulta trazas de mensajes entrantes/salientes sanitizados desde la base central de logs.",
 )
 async def get_message_logs(
-    client_id: Optional[str] = Query(None, description="Filtrar por Empresa/Cliente"),
-    tenant_id: Optional[str] = Query(None, description="Filtrar por División/Tenant"),
+    org_id: Optional[str] = Query(None, description="Filtrar por Organización"),
+    site_id: Optional[str] = Query(None, description="Filtrar por Sede"),
     usuario: Optional[str] = Query(None, description="Filtrar por Usuario"),
     direction: Optional[str] = Query(None, description="INCOMING o OUTGOING"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     admin: Dict[str, Any] = Depends(get_current_admin),
 ) -> Dict[str, Any]:
-    scoped_client = _apply_role_scope(admin, client_id)
+    scoped_org = _apply_role_scope(admin, org_id)
 
     filters: Dict[str, Any] = {}
-    if scoped_client:
-        filters["client_id"] = scoped_client
-    if tenant_id:
-        filters["tenant_id"] = tenant_id
+    if scoped_org:
+        filters["org_id"] = scoped_org
+    if site_id:
+        filters["site_id"] = site_id
     if usuario:
         filters["usuario"] = usuario
     if direction:
@@ -104,7 +107,7 @@ async def get_message_logs(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "client_id_scoped": scoped_client,
+        "org_id_scoped": scoped_org,
         "records": records,
     }
 
@@ -115,19 +118,19 @@ async def get_message_logs(
     description="Consulta errores y excepciones operativas registradas en la base central de logs.",
 )
 async def get_system_error_logs(
-    client_id: Optional[str] = Query(None),
-    tenant_id: Optional[str] = Query(None),
+    org_id: Optional[str] = Query(None),
+    site_id: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     admin: Dict[str, Any] = Depends(get_current_admin),
 ) -> Dict[str, Any]:
-    scoped_client = _apply_role_scope(admin, client_id)
+    scoped_org = _apply_role_scope(admin, org_id)
 
     filters: Dict[str, Any] = {}
-    if scoped_client:
-        filters["client_id"] = scoped_client
-    if tenant_id:
-        filters["tenant_id"] = tenant_id
+    if scoped_org:
+        filters["org_id"] = scoped_org
+    if site_id:
+        filters["site_id"] = site_id
 
     records = audit_logger.query("system_errors", filters=filters, limit=limit, offset=offset)
     total = audit_logger.store.count("system_errors", filters=filters) if audit_logger.store else len(records)
@@ -136,6 +139,7 @@ async def get_system_error_logs(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "org_id_scoped": scoped_org,
         "records": records,
     }
 
@@ -147,35 +151,44 @@ async def get_system_error_logs(
 @router.get(
     "/usage/{subpath:path}",
     summary="Proxy de Métricas de Uso hacia LLM Gateway",
-    description="Consulta métricas de consumo de modelos en el LLM Gateway con aislamiento multi-tenant.",
+    description="Consulta métricas de consumo de modelos en el LLM Gateway con aislamiento multi-organización.",
 )
 async def proxy_usage_to_gateway(
     subpath: str,
-    client_id: Optional[str] = Query(None),
-    tenant_id: Optional[str] = Query(None),
+    org_id: Optional[str] = Query(None),
+    site_id: Optional[str] = Query(None),
     usuario: Optional[str] = Query(None),
     rol: Optional[str] = Query(None),
     model: Optional[str] = Query(None),
+    days: Optional[int] = Query(None, ge=1, le=365),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     admin: Dict[str, Any] = Depends(get_current_admin),
 ) -> Any:
-    scoped_client = _apply_role_scope(admin, client_id)
+    scoped_org = _apply_role_scope(admin, org_id)
 
     params: Dict[str, Any] = {
         "limit": limit,
         "offset": offset,
     }
-    if scoped_client:
-        params["client_id"] = scoped_client
-    if tenant_id:
-        params["tenant_id"] = tenant_id
+    if scoped_org:
+        params["org_id"] = scoped_org
+    if site_id:
+        params["site_id"] = site_id
     if usuario:
         params["usuario"] = usuario
     if rol:
         params["rol"] = rol
     if model:
         params["model"] = model
+    if days is not None:
+        params["days"] = days
+    if date_from is not None:
+        params["date_from"] = date_from
+    if date_to is not None:
+        params["date_to"] = date_to
 
     target_url = f"{settings.LLM_GATEWAY_URL.rstrip('/')}/api/v1/usage/{subpath}".rstrip("/")
     if not subpath:
@@ -184,8 +197,8 @@ async def proxy_usage_to_gateway(
     # Forward user authorization to LLM Gateway
     headers = {
         "X-Internal-Key": settings.INTERNAL_SERVICE_KEY,
-        "X-Admin-Role": admin.get("role", "CLIENT_ADMIN"),
-        "X-Admin-Client-Id": admin.get("client_id", "") or "",
+        "X-Admin-Role": admin.get("role", "ORG_ADMIN"),
+        "X-Admin-Org-Id": admin.get("org_id", "") or "",
         "X-Admin-Username": admin.get("username", ""),
     }
 

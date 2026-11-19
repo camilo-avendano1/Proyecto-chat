@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from src.config import settings
 from src.core.audit import audit_logger
-from src.core.security import ROLE_SUPERADMIN, decode_admin_token
+from src.core.security import ROLE_GLOBAL_ADMIN, decode_admin_token
 from src.db.database import AdminUserORM, Database
 
 # Engine / Database singleton for auth-service
@@ -102,20 +102,20 @@ async def get_current_admin(
     return admin
 
 
-def require_superadmin(
+def require_global_admin(
     admin: AdminUserORM = Depends(get_current_admin),
 ) -> AdminUserORM:
-    """Ensures the authenticated administrator holds the SUPERADMIN role."""
-    if admin.role != ROLE_SUPERADMIN:
+    """Ensures the authenticated administrator holds the GLOBAL_ADMIN role."""
+    if admin.role != ROLE_GLOBAL_ADMIN:
         audit_logger.log_security_event(
-            event_type="SUPERADMIN_PRIVILEGE_DENIED",
+            event_type="GLOBAL_ADMIN_PRIVILEGE_DENIED",
             severity="HIGH",
-            client_id=admin.client_id or "platform",
+            org_id=admin.org_id or "platform",
             usuario=admin.username,
-            details={"attempted_role": admin.role, "required": ROLE_SUPERADMIN},
+            details={"attempted_role": admin.role, "required": ROLE_GLOBAL_ADMIN},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso restringido: requiere permisos de SUPERADMIN.",
+            detail="Acceso restringido: requiere permisos de GLOBAL_ADMIN.",
         )
     return admin

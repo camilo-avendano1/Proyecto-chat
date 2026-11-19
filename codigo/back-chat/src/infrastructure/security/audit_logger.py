@@ -3,14 +3,13 @@ Audit and Security Logging System for SaaS Core Back Central.
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 
 Provides comprehensive observability:
-- Inbound and outbound message audit per user and tenant.
+- Inbound and outbound message audit per user and site.
 - Real-time token consumption tracking.
 - Security event logging (Prompt Injections, Auth Failures, Origin Violations).
 - Structured JSON and standard log emission for SIEM / Centralized Loggers.
 """
 
 from collections import deque
-from datetime import datetime, timezone
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -41,11 +40,11 @@ class AuditSecurityLogger:
         self,
         event_type: str,
         severity: str,
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
         details: Dict[str, Any],
-        ips_code: Optional[str] = None,
+        site_code: Optional[str] = None,
         ip_address: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> SecurityAuditEvent:
@@ -53,11 +52,11 @@ class AuditSecurityLogger:
         event = SecurityAuditEvent(
             event_type=event_type,
             severity=severity,
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             details=details,
-            ips_code=ips_code,
+            site_code=site_code,
             ip_address=ip_address,
             request_id=request_id or str(uuid.uuid4()),
         )
@@ -68,11 +67,11 @@ class AuditSecurityLogger:
             persistent_audit_logger.log_security_event(
                 event_type=event_type,
                 severity=severity,
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 details=details,
-                ips_code=ips_code,
+                site_code=site_code,
                 ip_address=ip_address,
                 request_id=event.request_id,
             )
@@ -83,17 +82,21 @@ class AuditSecurityLogger:
             "type": "SECURITY_AUDIT_EVENT",
             "event_type": event.event_type,
             "severity": event.severity,
-            "client_id": event.client_id,
-            "tenant_id": event.tenant_id,
+            "org_id": event.org_id,
+            "site_id": event.site_id,
             "usuario": event.usuario,
-            "ips_code": event.ips_code,
+            "site_code": event.site_code,
             "ip_address": event.ip_address,
             "request_id": event.request_id,
             "details": event.details,
             "timestamp": event.created_at.isoformat(),
         }
 
-        msg = f"[SECURITY-{event.severity}] {event.event_type} | User: {event.usuario} | Tenant: {event.tenant_id} | Details: {json.dumps(event.details, ensure_ascii=False)}"
+        msg = (
+            f"[SECURITY-{event.severity}] {event.event_type} | User: {event.usuario} | "
+            f"Org: {event.org_id} | Site: {event.site_id} | "
+            f"Details: {json.dumps(event.details, ensure_ascii=False)}"
+        )
         if severity in ("CRITICAL", "HIGH"):
             security_logger.error(msg, extra={"audit_data": log_payload})
         elif severity == "MEDIUM":
@@ -105,22 +108,22 @@ class AuditSecurityLogger:
 
     def log_message_in(
         self,
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
         content: str,
-        ips_code: Optional[str] = None,
+        site_code: Optional[str] = None,
         request_id: Optional[str] = None,
         rol: Optional[str] = None,
     ) -> MessageLogRecord:
         """Audits an incoming user query."""
         record = MessageLogRecord(
             direction="INCOMING",
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
             content=content,
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id or str(uuid.uuid4()),
             status="RECEIVED",
         )
@@ -128,11 +131,11 @@ class AuditSecurityLogger:
 
         try:
             persistent_audit_logger.log_message_in(
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 content=content,
-                ips_code=ips_code,
+                site_code=site_code,
                 request_id=record.request_id,
                 rol=rol,
             )
@@ -140,52 +143,52 @@ class AuditSecurityLogger:
             logging.getLogger("audit.message").exception("Failed to persist incoming message to central DB")
 
         message_logger.info(
-            f"[MSG-IN] Req: {record.request_id} | Client: {client_id} | Tenant: {tenant_id} | User: {usuario} | Len: {len(content)} chars",
-            extra={"message_audit": record.to_dict()}
+            f"[MSG-IN] Req: {record.request_id} | Org: {org_id} | Site: {site_id} | User: {usuario} | Len: {len(content)} chars",
+            extra={"message_audit": record.to_dict()},
         )
         return record
 
     def log_message_out(
         self,
-        client_id: str,
-        tenant_id: str,
+        org_id: str,
+        site_id: str,
         usuario: str,
         content: str,
         tokens: int,
         costo_usd: float,
         latencia_ms: int,
         status: str = "COMPLETED",
-        ips_code: Optional[str] = None,
+        site_code: Optional[str] = None,
         request_id: Optional[str] = None,
         rol: Optional[str] = None,
     ) -> MessageLogRecord:
         """Audits an outgoing response to user."""
         record = MessageLogRecord(
             direction="OUTGOING",
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario=usuario,
-            content=content[:500] if len(content) > 500 else content,  # Preview for storage
+            content=content[:500] if len(content) > 500 else content,
             tokens=tokens,
             costo_usd=costo_usd,
             latencia_ms=latencia_ms,
             status=status,
-            ips_code=ips_code,
+            site_code=site_code,
             request_id=request_id,
         )
         self._message_logs.append(record)
 
         try:
             persistent_audit_logger.log_message_out(
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 content=content,
                 tokens=tokens,
                 costo_usd=costo_usd,
                 latencia_ms=latencia_ms,
                 status=status,
-                ips_code=ips_code,
+                site_code=site_code,
                 request_id=request_id,
                 rol=rol,
             )
@@ -193,8 +196,9 @@ class AuditSecurityLogger:
             logging.getLogger("audit.message").exception("Failed to persist outgoing message to central DB")
 
         message_logger.info(
-            f"[MSG-OUT] Req: {record.request_id} | User: {usuario} | Tenant: {tenant_id} | Status: {status} | Tokens: {tokens} | Latency: {latencia_ms}ms | Cost: ${costo_usd:.6f}",
-            extra={"message_audit": record.to_dict()}
+            f"[MSG-OUT] Req: {record.request_id} | User: {usuario} | Org: {org_id} | Site: {site_id} | "
+            f"Status: {status} | Tokens: {tokens} | Latency: {latencia_ms}ms | Cost: ${costo_usd:.6f}",
+            extra={"message_audit": record.to_dict()},
         )
         return record
 
@@ -204,8 +208,8 @@ class AuditSecurityLogger:
         origin: Optional[str] = None,
         api_key_preview: Optional[str] = None,
         ip_address: Optional[str] = None,
-        client_id: str = "unknown",
-        tenant_id: str = "unknown",
+        org_id: str = "unknown",
+        site_id: str = "unknown",
     ) -> SecurityAuditEvent:
         """Specialized logger for authentication or authorization failures."""
         details = {
@@ -216,8 +220,8 @@ class AuditSecurityLogger:
         return self.log_security_event(
             event_type="AUTH_FAILURE",
             severity="HIGH",
-            client_id=client_id,
-            tenant_id=tenant_id,
+            org_id=org_id,
+            site_id=site_id,
             usuario="unauthenticated",
             details=details,
             ip_address=ip_address,
@@ -227,8 +231,8 @@ class AuditSecurityLogger:
         self,
         error_type: str,
         message: str,
-        client_id: str = "unknown",
-        tenant_id: str = "unknown",
+        org_id: str = "unknown",
+        site_id: str = "unknown",
         usuario: str = "system",
         request_id: Optional[str] = None,
         exception_str: Optional[str] = None,
@@ -238,8 +242,8 @@ class AuditSecurityLogger:
             persistent_audit_logger.log_system_error(
                 error_type=error_type,
                 message=message,
-                client_id=client_id,
-                tenant_id=tenant_id,
+                org_id=org_id,
+                site_id=site_id,
                 usuario=usuario,
                 request_id=request_id,
                 exception_str=exception_str,
@@ -248,13 +252,14 @@ class AuditSecurityLogger:
             logging.getLogger("audit.error").exception("Failed to persist system error to central DB")
 
         error_logger.error(
-            f"[SYS-ERROR] Req: {request_id} | Type: {error_type} | User: {usuario} | Tenant: {tenant_id} | Msg: {message} | Exc: {exception_str}"
+            f"[SYS-ERROR] Req: {request_id} | Type: {error_type} | User: {usuario} | Org: {org_id} | Site: {site_id} | Msg: {message} | Exc: {exception_str}"
         )
 
     def get_recent_security_events(
         self,
         limit: int = 50,
-        tenant_id: Optional[str] = None,
+        site_id: Optional[str] = None,
+        org_id: Optional[str] = None,
         usuario: Optional[str] = None,
         event_type: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
@@ -262,7 +267,8 @@ class AuditSecurityLogger:
         events = list(self._security_events)
         filtered = [
             e for e in reversed(events)
-            if (tenant_id is None or e.tenant_id == tenant_id)
+            if (site_id is None or e.site_id == site_id)
+            and (org_id is None or e.org_id == org_id)
             and (usuario is None or e.usuario == usuario)
             and (event_type is None or e.event_type == event_type)
         ]
@@ -271,7 +277,8 @@ class AuditSecurityLogger:
     def get_recent_message_logs(
         self,
         limit: int = 50,
-        tenant_id: Optional[str] = None,
+        site_id: Optional[str] = None,
+        org_id: Optional[str] = None,
         usuario: Optional[str] = None,
         direction: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
@@ -279,7 +286,8 @@ class AuditSecurityLogger:
         logs = list(self._message_logs)
         filtered = [
             m for m in reversed(logs)
-            if (tenant_id is None or m.tenant_id == tenant_id)
+            if (site_id is None or m.site_id == site_id)
+            and (org_id is None or m.org_id == org_id)
             and (usuario is None or m.usuario == usuario)
             and (direction is None or m.direction == direction)
         ]

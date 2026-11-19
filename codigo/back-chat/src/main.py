@@ -21,6 +21,7 @@ from src.config import settings
 from src.core.logging_system import request_id_ctx, setup_logging
 from src.domain.exceptions import DomainException, SecurityException
 from src.infrastructure.security.audit_logger import audit_logger
+from src.routers.admin_documents_router import router as admin_documents_router
 from src.routers.admin_logs_router import router as admin_logs_router
 from src.routers.diagnostic_router import chat_router, router as diagnostic_router
 from src.routers.health_router import router as health_router
@@ -83,7 +84,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Ambiente: {settings.ENVIRONMENT}")
     logger.info(f"Proveedor LLM: {settings.LLM_PROVIDER} ({settings.LLM_BASE_URL})")
     logger.info(f"Modelo LLM: {settings.LLM_MODEL}")
-    logger.info(f"Rutas de Búsqueda Clientes: {settings.CLIENT_BUSQUEDA_URLS}")
+    logger.info(f"Rutas de Búsqueda Organizaciones: {settings.ORG_BUSQUEDA_URLS}")
     logger.info("Sistema de Logs de Seguridad y Auditoría de Tokens: ACTIVO")
     logger.info("Guardrails y Fast-Path para Saludos / Fuera de Dominio: ACTIVO")
     logger.info("================================================================")
@@ -130,8 +131,8 @@ async def security_exception_handler(request: Request, exc: SecurityException):
     audit_logger.log_security_event(
         event_type="SECURITY_EXCEPTION_TRIGGERED",
         severity="HIGH",
-        client_id="unknown",
-        tenant_id="unknown",
+        org_id="unknown",
+        site_id="unknown",
         usuario="unknown",
         details={"error": str(exc), "type": exc.__class__.__name__},
         request_id=req_id,
@@ -205,6 +206,7 @@ app.include_router(chat_router)
 app.include_router(diagnostic_router)
 app.include_router(health_router)
 app.include_router(admin_logs_router)
+app.include_router(admin_documents_router)
 
 
 if __name__ == "__main__":

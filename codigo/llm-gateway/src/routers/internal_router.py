@@ -57,11 +57,11 @@ async def chat_inference(
         # Registrar en Ledger
         record = ledger_repo.record_usage(
             request_id=caller.request_id,
-            client_id=caller.client_id,
-            tenant_id=caller.tenant_id,
+            org_id=caller.org_id,
+            site_id=caller.site_id,
             usuario=caller.usuario,
             rol=caller.rol,
-            ips_code=caller.ips_code,
+            site_code=caller.site_code,
             operacion=caller.operacion,
             tokens_input=result.tokens_input,
             tokens_output=result.tokens_output,
@@ -107,8 +107,8 @@ async def chat_inference(
             audit_logger.log_system_error(
                 error_type="LLM_STREAM_EXCEPTION",
                 message=str(exc),
-                client_id=caller.client_id,
-                tenant_id=caller.tenant_id,
+                org_id=caller.org_id,
+                site_id=caller.site_id,
                 usuario=caller.usuario,
                 request_id=caller.request_id,
             )
@@ -124,11 +124,11 @@ async def chat_inference(
         # Grabar en ledger
         ledger_repo.record_usage(
             request_id=caller.request_id,
-            client_id=caller.client_id,
-            tenant_id=caller.tenant_id,
+            org_id=caller.org_id,
+            site_id=caller.site_id,
             usuario=caller.usuario,
             rol=caller.rol,
-            ips_code=caller.ips_code,
+            site_code=caller.site_code,
             operacion=caller.operacion,
             tokens_input=tokens_in,
             tokens_output=tokens_out,
@@ -180,11 +180,11 @@ async def record_usage_event(
     ledger_repo = LedgerRepository(db)
     record = ledger_repo.record_usage(
         request_id=caller.request_id,
-        client_id=caller.client_id,
-        tenant_id=caller.tenant_id,
+        org_id=caller.org_id,
+        site_id=caller.site_id,
         usuario=caller.usuario,
         rol=caller.rol,
-        ips_code=caller.ips_code,
+        site_code=caller.site_code,
         operacion=caller.operacion,
         tokens_input=event.tokens_input,
         tokens_output=event.tokens_output,

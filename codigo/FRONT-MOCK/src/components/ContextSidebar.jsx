@@ -15,10 +15,12 @@ import {
   Braces
 } from 'lucide-react';
 
-export const TENANT_PRESETS = {
+export const SITE_PRESETS = {
   otra_empresa: {
-    client_id: 'otra_empresa',
-    client_name: 'Empresa Corporativa (Genérica)',
+    org_id: 'otra_empresa',
+    org_name: 'Empresa Corporativa (Genérica)',
+    site_name: 'División Operativa Central',
+    site_code: 'CORP-01',
     api_key: 'pk_live_otraempresa_1a2b3c4d5e6f7a8b',
     organization: 'División Operativa Central',
     unit_code: 'CORP-01',
@@ -29,14 +31,16 @@ export const TENANT_PRESETS = {
     default_module: 'OPERACIONES',
   },
   sura: {
-    client_id: 'sigires',
-    client_name: 'SIGIRES (Procex Software S.A.S)',
-    eps_id: 'eps_sura_01',
-    eps_nombre: 'EPS Sura - Regional Nor-Occidente',
+    org_id: 'sigires',
+    org_name: 'SIGIRES (Procex Software S.A.S)',
+    site_name: 'EPS Sura - Regional Nor-Occidente',
+    site_code: '631300040301',
     api_key: 'pk_live_sigires_8f9a2b1c3d4e5f6a',
-    ips_code: '631300040301',
-    ips_nombre: 'Clínica Las Américas',
-    eps_code: 'EPS_SURA',
+    metadata: {
+      division_id: 'eps_sura_01',
+      division_code: 'EPS_SURA',
+      unit_name: 'Clínica Las Américas',
+    },
     organization: 'EPS_SURA',
     unit_code: '631300040301',
     default_user: 'dr.juan.perez',
@@ -46,14 +50,16 @@ export const TENANT_PRESETS = {
     default_module: 'FORMULARIOS_CLINICOS',
   },
   sanitas: {
-    client_id: 'sigires',
-    client_name: 'SIGIRES (Procex Software S.A.S)',
-    eps_id: 'eps_sanitas_01',
-    eps_nombre: 'EPS Sanitas - IPS San Rafael',
+    org_id: 'sigires',
+    org_name: 'SIGIRES (Procex Software S.A.S)',
+    site_name: 'EPS Sanitas - IPS San Rafael',
+    site_code: '110010999901',
     api_key: 'pk_live_sigires_sanitas_7c9d1e2f3a4b',
-    ips_code: '110010999901',
-    ips_nombre: 'Clínica Reina Sofía',
-    eps_code: 'EPS_SANITAS',
+    metadata: {
+      division_id: 'eps_sanitas_01',
+      division_code: 'EPS_SANITAS',
+      unit_name: 'Clínica Reina Sofía',
+    },
     organization: 'EPS_SANITAS',
     unit_code: '110010999901',
     default_user: 'dr.juan.perez',
@@ -63,14 +69,16 @@ export const TENANT_PRESETS = {
     default_module: 'FORMULARIOS_CLINICOS',
   },
   nuevaeps: {
-    client_id: 'sigires',
-    client_name: 'SIGIRES (Procex Software S.A.S)',
-    eps_id: 'eps_nueva_01',
-    eps_nombre: 'Nueva EPS - Consorcio Salud',
+    org_id: 'sigires',
+    org_name: 'SIGIRES (Procex Software S.A.S)',
+    site_name: 'Nueva EPS - Consorcio Salud',
+    site_code: '050010001201',
     api_key: 'pk_live_sigires_nuevaeps_9e8d7c6b5a4f',
-    ips_code: '050010001201',
-    ips_nombre: 'Hospital Universitario San Vicente',
-    eps_code: 'EPS_NUEVA',
+    metadata: {
+      division_id: 'eps_nueva_01',
+      division_code: 'EPS_NUEVA',
+      unit_name: 'Hospital Universitario San Vicente',
+    },
     organization: 'EPS_NUEVA',
     unit_code: '050010001201',
     default_user: 'dr.juan.perez',
@@ -94,7 +102,7 @@ export const SCENARIO_PRESETS = [
     id: 'corporativo_contexto',
     name: 'Corporativo: Con Contexto y Extras',
     minimalMode: false,
-    target_tenant: 'otra_empresa',
+    target_site: 'otra_empresa',
     query: '¿Cuál es el límite de aprobación para compras de tecnología?',
     system_logs: '',
     extras_json: JSON.stringify(
@@ -120,9 +128,9 @@ export const SCENARIO_PRESETS = [
   },
   {
     id: 'sigires_enfermeria',
-    name: 'Cliente SIGIRES: Formulario + Log',
+    name: 'Org. SIGIRES: Formulario + Log',
     minimalMode: false,
-    target_tenant_group: 'sigires',
+    target_org: 'sigires',
     query: 'Al subir el formulario de enfermería me rechaza el registro de signos vitales',
     system_logs:
       "Fila: 18 | Campo: 6 | Variable 'Presion_Arterial' fuera de formato esperado. Error CE_CAMPO_006_FMT",
@@ -149,9 +157,9 @@ export const SCENARIO_PRESETS = [
   },
   {
     id: 'sigires_delimitador',
-    name: 'Cliente SIGIRES: Error Formato Fase 1',
+    name: 'Org. SIGIRES: Error Formato Fase 1',
     minimalMode: false,
-    target_tenant_group: 'sigires',
+    target_org: 'sigires',
     query: 'El validador rechaza el archivo plano en Fase 1 por delimitador y columnas',
     system_logs:
       'FASE 1 (CA) - Error CA_FILE_001_DELIM: Fila 3 tiene 19 columnas delimitadas por pipe (|) y la estructura exige 22.',
@@ -195,8 +203,8 @@ export const SCENARIO_PRESETS = [
 ];
 
 export default function ContextSidebar({
-  tenantKey,
-  setTenantKey,
+  siteKey,
+  setSiteKey,
   minimalMode,
   setMinimalMode,
   sessionData,
@@ -219,9 +227,9 @@ export default function ContextSidebar({
   const [showAdvancedUser, setShowAdvancedUser] = useState(false);
   const [showExtras, setShowExtras] = useState(true);
 
-  const handleTenantChange = (key) => {
-    setTenantKey(key);
-    const preset = TENANT_PRESETS[key];
+  const handleSiteChange = (key) => {
+    setSiteKey(key);
+    const preset = SITE_PRESETS[key];
     if (preset) {
       setUserContext({
         id: preset.default_user,
@@ -248,19 +256,19 @@ export default function ContextSidebar({
         </div>
       </div>
 
-      {/* 2. Tenant / Client Selector */}
+      {/* 2. Organization / Site Selector */}
       <div className="panel-section">
         <div className="section-label">
-          <span>Cliente & Tenant (Empresa)</span>
+          <span>Organización y Sede</span>
           <Key size={13} />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Entidad / Cliente Solicitante</label>
+          <label className="form-label">Entidad / Organización Solicitante</label>
           <select
             className="form-select"
-            value={tenantKey}
-            onChange={(e) => handleTenantChange(e.target.value)}
+            value={siteKey}
+            onChange={(e) => handleSiteChange(e.target.value)}
           >
             <option value="otra_empresa">otra_empresa - Empresa Corporativa (Genérica)</option>
             <option value="sura">SIGIRES - EPS Sura (Regional Nor-Occidente)</option>
@@ -291,26 +299,28 @@ export default function ContextSidebar({
           {sessionData && (
             <>
               <div className="session-row">
-                <span className="session-key">Cliente:</span>
+                <span className="session-key">Organización:</span>
                 <span
                   className="session-val"
-                  title={`${sessionData.client_name || ''} (${sessionData.client_id || ''})`}
+                  title={`${sessionData.org_name || ''} (${sessionData.org_id || ''})`}
                 >
-                  {sessionData.client_name
-                    ? `${sessionData.client_name} (${sessionData.client_id})`
-                    : sessionData.client_id}
+                  {sessionData.org_name
+                    ? `${sessionData.org_name} (${sessionData.org_id})`
+                    : sessionData.org_id}
                 </span>
               </div>
               <div className="session-row">
-                <span className="session-key">Tenant Name:</span>
-                <span className="session-val" title={sessionData.tenant_name}>
-                  {sessionData.tenant_name}
+                <span className="session-key">
+                  {sessionData.site_label ? `Nombre de ${sessionData.site_label}:` : 'Nombre de Sede:'}
+                </span>
+                <span className="session-val" title={sessionData.site_name || ''}>
+                  {sessionData.site_name}
                 </span>
               </div>
               <div className="session-row">
                 <span className="session-key">Token JWT:</span>
                 <span className="session-val" title={sessionData.session_token}>
-                  {sessionData.session_token.slice(0, 18)}...
+                  {sessionData.session_token?.slice(0, 18)}...
                 </span>
               </div>
             </>
@@ -335,7 +345,7 @@ export default function ContextSidebar({
           <Sparkles size={13} style={{ color: '#10b981' }} />
         </div>
         <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-          Carga en 1 clic escenarios mínimos genéricos, corporativos enriquecidos o de clientes específicos (ej. SIGIRES):
+          Carga en 1 clic escenarios mínimos genéricos, corporativos enriquecidos o de organizaciones específicas (ej. SIGIRES):
         </p>
         <div className="preset-chips">
           {SCENARIO_PRESETS.map((scenario) => (

@@ -1,7 +1,7 @@
 """
 Domain entities for SaaS Core Back Central.
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
-Representing core business concepts: Multi-Client, Multi-Tenant, Sessions, Diagnostics, and Ledgers.
+Representing core business concepts: Multi-Organization, Multi-Site, Sessions, Diagnostics, and Ledgers.
 """
 
 from dataclasses import dataclass, field
@@ -9,22 +9,21 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import uuid
 
-from src.domain.value_objects import ErrorPhase, KnowledgeScope, Severity, DocumentCategory
+from src.domain.value_objects import ErrorPhase, KnowledgeScope, Severity
 
 
 @dataclass
-class ClientCompany:
+class Organization:
     """
-    Represents an enterprise client/account of our SaaS platform.
-    Examples:
-    - SIGIRES (Procex Software S.A.S)
-    - Other healthtech, fintech or enterprise clients in the future.
-    Each client defines their target Search/RAG API endpoint.
+    Represents an enterprise organization/account on our SaaS platform.
+    Each organization defines their target Search/RAG API endpoint and site terminology.
     """
-    client_id: str
+    org_id: str
     nombre: str
     busqueda_api_url: str
     dominios_permitidos: List[str]
+    site_label: str = "Sede"
+    site_label_plural: str = "Sedes"
     status: str = "ACTIVE"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -40,17 +39,17 @@ class ClientCompany:
 
 
 @dataclass
-class Tenant:
+class Site:
     """
-    Represents an entity or division within a client company.
-    In SIGIRES: an EPS / EAPB (Sura, Sanitas, Nueva EPS, etc.).
+    Represents a site, branch, or operational unit within an Organization.
+    In SIGIRES: an IPS / institution / divisional unit.
     """
-    tenant_id: str
+    site_id: str
     nombre: str
-    codigo_eps: str
+    site_code: str
     dominios_permitidos: List[str]
     api_key_hash: str
-    client_id: str = "default"
+    org_id: str = "default"
     status: str = "ACTIVE"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -71,15 +70,15 @@ class Tenant:
 class WidgetSession:
     """
     Active authenticated session for the widget chat.
-    Contains client identification and specific search API routing.
+    Contains organization/site identification and specific search API routing.
     """
     session_token: str
-    tenant_id: str
-    tenant_name: str
-    eps_id: Optional[str] = None
-    ips_code: Optional[str] = None
-    client_id: str = "default"
-    client_name: str = "Plataforma SaaS"
+    site_id: str
+    site_name: str
+    site_code: Optional[str] = None
+    site_label: str = "Sede"
+    org_id: str = "default"
+    org_name: str = "Plataforma SaaS"
     busqueda_api_url: str = "http://localhost:8001"
     metadata: Dict[str, Any] = field(default_factory=dict)
     expires_in_seconds: int = 1800
@@ -126,14 +125,14 @@ class KnowledgeSource:
 
 @dataclass
 class UsageLedgerRecord:
-    tenant_id: str
-    ips_code: Optional[str]
+    site_id: str
+    site_code: Optional[str]
     operacion: str
     tokens_input: int
     tokens_output: int
     costo_usd: float
     latencia_ms: int
-    client_id: str = "default"
+    org_id: str = "default"
     usuario: str = "anonimo"
     status: str = "COMPLETED"
     is_llm_call: bool = True
@@ -146,10 +145,10 @@ class UsageLedgerRecord:
         return {
             "ledger_id": self.ledger_id,
             "request_id": self.request_id,
-            "client_id": self.client_id,
-            "tenant_id": self.tenant_id,
+            "org_id": self.org_id,
+            "site_id": self.site_id,
             "usuario": self.usuario,
-            "ips_code": self.ips_code,
+            "site_code": self.site_code,
             "operacion": self.operacion,
             "tokens_input": self.tokens_input,
             "tokens_output": self.tokens_output,
@@ -165,15 +164,15 @@ class UsageLedgerRecord:
 @dataclass
 class MessageLogRecord:
     """
-    Detailed audit trail of inbound/outbound chat messages per user and tenant.
+    Detailed audit trail of inbound/outbound chat messages per user and site.
     Guarantees full observability and compliance with Habeas Data.
     """
     direction: str  # "INCOMING" or "OUTGOING"
-    client_id: str
-    tenant_id: str
+    org_id: str
+    site_id: str
     usuario: str
     content: str
-    ips_code: Optional[str] = None
+    site_code: Optional[str] = None
     request_id: Optional[str] = None
     tokens: int = 0
     costo_usd: float = 0.0
@@ -187,10 +186,10 @@ class MessageLogRecord:
             "log_id": self.log_id,
             "request_id": self.request_id,
             "direction": self.direction,
-            "client_id": self.client_id,
-            "tenant_id": self.tenant_id,
+            "org_id": self.org_id,
+            "site_id": self.site_id,
             "usuario": self.usuario,
-            "ips_code": self.ips_code,
+            "site_code": self.site_code,
             "content": self.content,
             "tokens": self.tokens,
             "costo_usd": self.costo_usd,
@@ -208,11 +207,11 @@ class SecurityAuditEvent:
     """
     event_type: str  # e.g., "PROMPT_INJECTION_ATTEMPT", "ORIGIN_FORBIDDEN", "AUTH_FAILURE"
     severity: str    # "LOW", "MEDIUM", "HIGH", "CRITICAL"
-    client_id: str
-    tenant_id: str
+    org_id: str
+    site_id: str
     usuario: str
     details: Dict[str, Any]
-    ips_code: Optional[str] = None
+    site_code: Optional[str] = None
     ip_address: Optional[str] = None
     request_id: Optional[str] = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -224,10 +223,10 @@ class SecurityAuditEvent:
             "request_id": self.request_id,
             "event_type": self.event_type,
             "severity": self.severity,
-            "client_id": self.client_id,
-            "tenant_id": self.tenant_id,
+            "org_id": self.org_id,
+            "site_id": self.site_id,
             "usuario": self.usuario,
-            "ips_code": self.ips_code,
+            "site_code": self.site_code,
             "ip_address": self.ip_address,
             "details": self.details,
             "created_at": self.created_at.isoformat(),
