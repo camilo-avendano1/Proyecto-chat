@@ -94,6 +94,7 @@ $env:DISABLE_SQLALCHEMY_CEXT="1"; pytest -v
 ## 📖 Documentación Técnica Detallada
 
 - **[Arquitectura de Microservicios](codigo/ARQUITECTURA_MICROSERVICIOS.md)**
+- **[Pipeline CI/CD, Cobertura, Smoke Test y SonarQube](codigo/CI_CD_Y_SONAR.md)**
 - **[Flujo de Información, System Prompt y Búsqueda RAG](codigo/back-chat/FLUJO_INFORMACION_Y_BUSQUEDA.md)**
 - **[Guía de Peticiones cURL y Contratos de Integración](codigo/GUIA_PETICIONES_CURL.md)**
 - **[Documentación de `back-chat`](codigo/back-chat/README.md)**

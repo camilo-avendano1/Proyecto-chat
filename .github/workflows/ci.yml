@@ -1,0 +1,245 @@
+name: Atenta CI/CD — Pruebas, Cobertura, Smoke E2E y SonarQube
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "22"
+  DISABLE_SQLALCHEMY_CEXT: "1"
+
+jobs:
+  backend-unit-coverage:
+    name: Backend Unit & Coverage (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: auth-service
+            min_cov: 78
+          - service: llm-gateway
+            min_cov: 78
+          - service: back-chat
+            min_cov: 72
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: codigo/${{ matrix.service }}/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r codigo/${{ matrix.service }}/requirements.txt
+
+      - name: Run pytest with coverage gate (>= ${{ matrix.min_cov }}%)
+        working-directory: codigo/${{ matrix.service }}
+        run: |
+          mkdir -p ../../reports
+          pytest -v \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml:../../reports/coverage-${{ matrix.service }}.xml \
+            --junitxml=../../reports/junit-${{ matrix.service }}.xml \
+            --cov-fail-under=${{ matrix.min_cov }}
+
+      - name: Normalize Cobertura XML paths for SonarQube
+        run: |
+          python codigo/scripts/normalize_coverage.py \
+            reports/coverage-${{ matrix.service }}.xml \
+            codigo/${{ matrix.service }}
+
+      - name: Upload coverage and JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ matrix.service }}
+          path: |
+            reports/coverage-${{ matrix.service }}.xml
+            reports/junit-${{ matrix.service }}.xml
+          if-no-files-found: warn
+
+  frontend-build-audit:
+    name: Frontend Build & Audit (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ["front-admin", "FRONT-MOCK"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: codigo/${{ matrix.app }}/package-lock.json
+
+      - name: Install dependencies and build production bundle
+        working-directory: codigo/${{ matrix.app }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Audit production npm dependencies (high/critical)
+        working-directory: codigo/${{ matrix.app }}
+        run: |
+          mkdir -p ../../reports
+          npm audit --omit=dev --audit-level=high
+          npm audit --json > ../../reports/npm-audit-${{ matrix.app }}.json || true
+
+      - name: Upload npm audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-npm-${{ matrix.app }}
+          path: reports/npm-audit-${{ matrix.app }}.json
+          if-no-files-found: warn
+
+  security-vulnerability-scan:
+    name: Security SAST (Bandit) & CVE Audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security scanners
+        run: |
+          python -m pip install --upgrade pip
+          pip install "bandit>=1.7.9" "pip-audit>=2.7.3" "certifi>=2026.10.18"
+
+      - name: Run Bandit SAST & generate SonarQube JSON report
+        run: |
+          mkdir -p reports
+          bandit -c .bandit \
+            -r codigo/auth-service/src codigo/llm-gateway/src codigo/back-chat/src \
+            -f json -o reports/bandit-report.json --exit-zero
+          bandit -c .bandit \
+            -r codigo/auth-service/src codigo/llm-gateway/src codigo/back-chat/src \
+            -lll
+
+      - name: Run pip-audit CVE check across backend manifests
+        run: |
+          mkdir -p reports
+          python -m pip_audit -s osv \
+            -r codigo/auth-service/requirements.txt \
+            -r codigo/llm-gateway/requirements.txt \
+            -r codigo/back-chat/requirements.txt \
+            --format json --output reports/pip-audit-report.json
+
+      - name: Upload security scan reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-security
+          path: |
+            reports/bandit-report.json
+            reports/pip-audit-report.json
+          if-no-files-found: warn
+
+  e2e-user-smoke:
+    name: E2E User & Admin Smoke Test (5 Services)
+    runs-on: ubuntu-latest
+    needs: [backend-unit-coverage, frontend-build-audit]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install backend and frontend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            -r codigo/auth-service/requirements.txt \
+            -r codigo/llm-gateway/requirements.txt \
+            -r codigo/back-chat/requirements.txt
+          npm --prefix codigo/FRONT-MOCK ci
+          npm --prefix codigo/front-admin ci
+
+      - name: Run full 5-service E2E user and admin smoke test
+        run: python codigo/scripts/e2e_smoke_test.py
+
+  sonarqube-analysis:
+    name: SonarQube Security & Quality Gate
+    runs-on: ubuntu-latest
+    needs:
+      - backend-unit-coverage
+      - frontend-build-audit
+      - security-vulnerability-scan
+      - e2e-user-smoke
+    steps:
+      - name: Checkout repository with full git history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download coverage, JUnit and Bandit artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: reports
+          merge-multiple: true
+
+      - name: Check SonarQube secrets configuration
+        id: sonar_cfg
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_HOST_URL" ] && [ -n "$SONAR_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### SonarQube en espera de credenciales"
+              echo "Para activar el escaneo y Quality Gate contra tu servidor SonarQube self-hosted,"
+              echo "configura en GitHub (**Settings -> Secrets and variables -> Actions**):"
+              echo "- \`SONAR_HOST_URL\`: URL pública de tu instancia SonarQube (ej. \`https://sonar.tu-dominio.com\`)"
+              echo "- \`SONAR_TOKEN\`: token de análisis generado en SonarQube para el proyecto \`atenta-platform\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run SonarQube Scan
+        if: steps.sonar_cfg.outputs.enabled == 'true'
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Check SonarQube Quality Gate
+        if: steps.sonar_cfg.outputs.enabled == 'true'
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          pollingTimeoutSec: "300"

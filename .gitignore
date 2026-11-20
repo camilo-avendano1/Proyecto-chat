@@ -36,6 +36,12 @@ htmlcov/
 *.egg-info/
 .installed.cfg
 *.egg
+reports/
+coverage.xml
+coverage-*.xml
+junit-*.xml
+bandit-*.json
+.scannerwork/
 
 # 4. Bases de datos locales SQLite y archivos temporales WAL/SHM
 *.db

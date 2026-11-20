@@ -1,0 +1,12 @@
+exclude_dirs:
+  - tests
+  - node_modules
+  - dist
+  - .pytest_cache
+  - .venv
+  - venv
+  - logs
+  - data
+  - reports
+skips:
+  - B104
