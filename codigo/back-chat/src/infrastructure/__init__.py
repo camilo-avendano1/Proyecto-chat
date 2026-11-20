@@ -1,4 +1,4 @@
 """
-Infrastructure package for SIGIRES Back Central.
+Infrastructure package for Atenta Chat & RAG Gateway.
 Adapters and external integrations.
 """

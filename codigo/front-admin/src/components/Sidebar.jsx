@@ -45,8 +45,8 @@ export default function Sidebar({
               <LayoutDashboard size={18} />
             </div>
             <div>
-              <div className="brand-title">Consola Admin</div>
-              <div className="brand-sub">Métricas y Documentos</div>
+              <div className="brand-title">Atenta</div>
+              <div className="brand-sub">Consola Administrativa</div>
             </div>
           </div>
           {mobileOpen ? (

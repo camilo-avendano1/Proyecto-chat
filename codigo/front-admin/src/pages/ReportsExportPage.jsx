@@ -441,7 +441,7 @@ export default function ReportsExportPage({
           msgRes.status === 'fulfilled' ? extractArray(msgRes.value) : [],
       };
 
-      downloadJSON(`reporte-consolidado-saas-${dateStamp}.json`, payload);
+      downloadJSON(`reporte-consolidado-atenta-${dateStamp}.json`, payload);
       if (onToast) onToast('Reporte consolidado JSON descargado.', 'success');
     } catch (err) {
       if (onToast) onToast(err.message || 'Error al generar el reporte consolidado.', 'error');

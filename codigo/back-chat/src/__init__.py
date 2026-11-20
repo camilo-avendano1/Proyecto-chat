@@ -1,3 +1,3 @@
 """
-SIGIRES Back Central (back-chat) application source package.
+Atenta Chat & RAG Gateway (back-chat) application source package.
 """

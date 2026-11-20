@@ -1,5 +1,5 @@
 /**
- * Client API Service for SaaS Core Microservices
+ * Client API Service for Atenta Microservices
  * Communicates with:
  * - Auth Service:      http://localhost:8002
  * - LLM Gateway:       http://localhost:8003

@@ -1,5 +1,5 @@
 """
-Domain entities for SaaS Core Back Central.
+Domain entities for Atenta Chat & RAG Gateway.
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 Representing core business concepts: Multi-Organization, Multi-Site, Sessions, Diagnostics, and Ledgers.
 """
@@ -15,7 +15,7 @@ from src.domain.value_objects import ErrorPhase, KnowledgeScope, Severity
 @dataclass
 class Organization:
     """
-    Represents an enterprise organization/account on our SaaS platform.
+    Represents an enterprise organization/account on Atenta.
     Each organization defines their target Search/RAG API endpoint and site terminology.
     """
     org_id: str
@@ -78,7 +78,7 @@ class WidgetSession:
     site_code: Optional[str] = None
     site_label: str = "Sede"
     org_id: str = "default"
-    org_name: str = "Plataforma SaaS"
+    org_name: str = "Atenta"
     busqueda_api_url: str = "http://localhost:8001"
     metadata: Dict[str, Any] = field(default_factory=dict)
     expires_in_seconds: int = 1800

@@ -1,14 +1,14 @@
 """
-Configuración del LLM Gateway (Pydantic Settings).
+Configuración de Atenta LLM Gateway (Pydantic Settings).
 Puerto: 8003
 Desarrollado por: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 
 Responsabilidades del servicio:
 - Único punto de contacto hacia proveedores de LLM (LM Studio, Ollama, OpenAI, DeepSeek).
-- Fallback a simulación clínica de contingencia.
-- Atribución detallada de consumo: cliente, tenant, usuario, rol, operación, request_id, modelo.
+- Fallback a simulación de contingencia.
+- Atribución detallada de consumo: organización, sede, usuario, rol, operación, request_id, modelo.
 - Almacenamiento persistente del libro de consumo (Usage Ledger).
-- Consultas de auditoría de consumo agrupadas por usuario, tenant, rol y modelo.
+- Consultas de auditoría de consumo agrupadas por usuario, sede, rol y modelo.
 """
 
 from pathlib import Path
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     SERVICE_NAME: str = "llm-gateway"
-    APP_NAME: str = "SaaS Core LLM Gateway & Ingestion Proxy"
+    APP_NAME: str = "Atenta LLM Gateway (Inferencia y Contabilidad)"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
     HOST: str = "0.0.0.0"

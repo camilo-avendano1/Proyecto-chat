@@ -1,5 +1,5 @@
-# Core SaaS Chat & RAG Gateway (`back-chat`)
-## Orquestador Conversacional y de Búsqueda RAG Multi-Organización
+# Atenta — Orquestador de Chat y Búsqueda RAG (`back-chat`)
+## Orquestador Conversacional y de Búsqueda RAG Multi-Organización de Atenta
 
 > **Equipo de Desarrollo (Autores):**  
 > - **Juan Camilo Avendaño**  
@@ -25,7 +25,7 @@
                             │ POST /api/v1/chat/stream | /query
                             ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│                      SAAS CORE BACK CENTRAL (back-chat)                │
+│                      ATENTA BACK CENTRAL (back-chat)                   │
 │  (Desarrollado por: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno)│
 │                                                                        │
 │  1. Validación de JWT de Sesión (org_id, site_id, busqueda_url)        │

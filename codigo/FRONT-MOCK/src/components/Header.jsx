@@ -28,11 +28,11 @@ export default function Header({
         </div>
         <div className="brand-title">
           <h1>
-            SaaS Core Chat & Gateway
-            <span className="brand-badge">Front Mock</span>
+            Atenta
+            <span className="brand-badge">Simulador</span>
           </h1>
           <div className="brand-subtitle">
-            Asistente Virtual SaaS • RAG Multi-Cliente
+            Asistente Virtual · Búsqueda RAG Multi-Organización
           </div>
         </div>
       </div>

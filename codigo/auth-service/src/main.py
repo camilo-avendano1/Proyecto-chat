@@ -1,5 +1,5 @@
 """
-Main FastAPI Application Entry Point for SaaS Auth Service.
+Main FastAPI Application Entry Point for Atenta Auth Service.
 Port: 8002
 Desarrollado por: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 """
@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
     logger.info("Base de Datos y Administradores inicializados correctamente.")
     logger.info("================================================================")
     yield
-    logger.info("Cerrando SaaS Auth Service...")
+    logger.info("Cerrando Atenta Auth Service...")
     audit_logger.close()
     get_db_instance().dispose()
 
@@ -105,7 +105,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Microservicio de autenticación de usuarios de widget y administradores.",
+    description="Microservicio de autenticación de sesiones de widget y administradores de Atenta.",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

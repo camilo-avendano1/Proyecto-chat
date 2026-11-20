@@ -1,3 +1,3 @@
 """
-Domain layer package for SIGIRES Back Central.
+Domain layer package for Atenta Chat & RAG Gateway.
 """

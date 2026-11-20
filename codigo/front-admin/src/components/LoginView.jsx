@@ -57,8 +57,8 @@ export default function LoginView({ initialNotice = '', onLoginSuccess }) {
             <ShieldCheck size={19} />
           </div>
           <div>
-            <div className="brand-title">Consola de Administración</div>
-            <div className="brand-sub">Métricas de uso, sedes y documentos del asistente</div>
+            <div className="brand-title">Atenta</div>
+            <div className="brand-sub">Consola de Administración · Métricas, sedes y documentos</div>
           </div>
         </div>
 

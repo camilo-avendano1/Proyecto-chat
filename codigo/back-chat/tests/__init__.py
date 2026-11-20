@@ -1,3 +1,3 @@
 """
-Tests package for SIGIRES Back Central.
+Tests package for Atenta Chat & RAG Gateway.
 """

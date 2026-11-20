@@ -2,20 +2,20 @@
 
 **Desarrollado por:** Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.  
 **Fecha:** Octubre 2026  
-**Ecosistema:** SaaS Core Chat & RAG Gateway Multi-Organización
+**Plataforma:** Atenta — Asistencia Virtual y RAG Gateway Multi-Organización
 
 ---
 
 ## 1. Visión General de la Separación de Servicios
 
-Para garantizar alta disponibilidad, aislamiento de fallos, auditoría estricta y control de costos de inteligencia artificial entre múltiples organizaciones y sus sedes (tiendas, talleres, sucursales o IPS/clínicas), se separaron las dependencias en tres microservicios FastAPI dedicados, respaldados por una base central de auditoría y dos frontends:
+Para garantizar alta disponibilidad, aislamiento de fallos, auditoría estricta y control de costos de inteligencia artificial entre múltiples organizaciones y sus sedes (tiendas, talleres, sucursales o IPS/clínicas), se separaron las dependencias en tres microservicios FastAPI dedicados, respaldados por una base central de auditoría y dos frontends de **Atenta**:
 
 ```mermaid
 graph TD
-    FM["FRONT-MOCK (React + Vite :5173)"] -->|1. Widget Session Handshake| AS["auth-service (:8002)"]
+    FM["Atenta Simulador (FRONT-MOCK :5173)"] -->|1. Widget Session Handshake| AS["auth-service (:8002)"]
     FM -->|2. POST /api/v1/chat/stream o /query| BC["back-chat (:8000)"]
 
-    FA["front-admin (Consola Admin :5174)"] -->|1. Admin Login / Organizaciones / Sedes| AS
+    FA["Atenta Consola Admin (front-admin :5174)"] -->|1. Admin Login / Organizaciones / Sedes| AS
     FA -->|2. Métricas, Auditoría y Documentos| BC
 
     BC -->|X-Internal-Key + Atribución Multi-Organización| LG["llm-gateway (:8003)"]

@@ -1,6 +1,6 @@
 /**
  * Utilidades de exportación (CSV UTF-8 con BOM, JSON con metadatos)
- * y formateadores numéricos/monetarios/fechas para la Consola Administrativa.
+ * y formateadores numéricos/monetarios/fechas para la Consola Administrativa de Atenta.
  */
 
 function escapeCsvCell(raw) {
@@ -68,7 +68,7 @@ export function downloadCSV(filename, columns, rows) {
 export function downloadJSON(filename, data, metadata = {}) {
   const baseMeta = {
     exported_at: new Date().toISOString(),
-    source: 'front-admin-console',
+    source: 'atenta-admin-console',
     ...metadata,
   };
 

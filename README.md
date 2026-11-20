@@ -1,8 +1,8 @@
-# SaaS Core Chat & RAG Gateway Multi-Organización
+# Atenta — Plataforma de Asistencia Virtual y RAG Multi-Organización
 
 **Desarrollado por:** Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno  
 
-Plataforma SaaS de asistencia virtual e inteligencia artificial basada en arquitectura de microservicios (**FastAPI + React/Vite**), diseñada para integrarse en **múltiples organizaciones y sectores** (portales corporativos, comercios/tiendas, talleres mecánicos, sucursales, clínicas/IPS, mesas de ayuda y sistemas especializados como **SIGIRES**), conectando cada consulta con su servicio de búsqueda **RAG (`back-busqueda`)**.
+**Atenta** es una plataforma de asistencia virtual e inteligencia artificial basada en arquitectura de microservicios (**FastAPI + React/Vite**), diseñada para integrarse en **múltiples organizaciones y sectores** (portales corporativos, comercios/tiendas, talleres mecánicos, sucursales, clínicas/IPS, mesas de ayuda y sistemas especializados como **SIGIRES**), conectando cada consulta con su servicio de búsqueda **RAG (`back-busqueda`)**.
 
 ---
 
@@ -63,8 +63,8 @@ cd codigo
 | **`auth-service`** | `8002` | Handshake de sesiones de widget (`X-Widget-Key`), organizaciones con terminología personalizable (`site_label`/`site_label_plural`), sedes y admins (`GLOBAL_ADMIN` / `ORG_ADMIN`). |
 | **`llm-gateway`** | `8003` | Proxy de inferencia hacia LM Studio, Ollama u OpenAI y contabilidad de tokens por organización/sede/usuario/rol. |
 | **`back-chat`** | `8000` | Orquestador de chat (`POST /api/v1/chat/stream`, `POST /api/v1/chat/query`), conexión con `back-busqueda` (:8001) y documentos del asistente. |
-| **`FRONT-MOCK`** | `5173` | Consola web interactiva para simular peticiones mínimas o enriquecidas entre múltiples organizaciones/sedes y observabilidad básica. |
-| **`front-admin`** | `5174` | Consola administrativa (`GLOBAL_ADMIN` / `ORG_ADMIN`) con nomenclatura adaptable (`Sedes`, `Tiendas`, `Talleres`, `IPS`, `Sucursales`), métricas, reportes CSV/JSON, claves de conexión y documentos. |
+| **`FRONT-MOCK`** | `5173` | Simulador web interactivo de **Atenta** para probar peticiones mínimas o enriquecidas entre múltiples organizaciones/sedes y observabilidad básica. |
+| **`front-admin`** | `5174` | Consola administrativa de **Atenta** (`GLOBAL_ADMIN` / `ORG_ADMIN`) con nomenclatura adaptable (`Sedes`, `Tiendas`, `Talleres`, `IPS`, `Sucursales`), métricas, reportes CSV/JSON, claves de conexión y documentos. |
 
 ### 2. Verificación Rápida End-to-End (`prueba.py`)
 

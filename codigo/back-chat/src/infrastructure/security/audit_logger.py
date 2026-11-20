@@ -1,5 +1,5 @@
 """
-Audit and Security Logging System for SaaS Core Back Central.
+Audit and Security Logging System for Atenta Chat & RAG Gateway.
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 
 Provides comprehensive observability:

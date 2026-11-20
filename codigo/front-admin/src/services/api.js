@@ -1,5 +1,5 @@
 /**
- * Cliente API autenticado para la Consola de Administración SaaS.
+ * Cliente API autenticado para la Consola Administrativa de Atenta.
  * Consume auth-service (:8002), back-chat (:8000) y llm-gateway (:8003).
  */
 

@@ -1,10 +1,10 @@
 # Guía de Peticiones cURL y Contratos de Integración de API
 
-**Ecosistema:** SaaS Core Chat & Gateway Multi-Organización en Tiempo Real  
+**Plataforma:** Atenta — Asistencia Virtual y RAG Multi-Organización en Tiempo Real  
 **Equipo de Desarrollo:** Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno  
 **Fecha:** Octubre 2026  
 
-Este documento contiene la colección completa de peticiones `cURL` para tres audiencias técnicas:
+Este documento contiene la colección completa de peticiones `cURL` de **Atenta** para tres audiencias técnicas:
 1. **Desarrolladores de APIs de Búsqueda / RAG (`back-busqueda`)**: Contrato agnóstico a la organización que debe implementar cada servicio de búsqueda. **El conocimiento específico de cada negocio, documentos, manuales y reglamentos proviene exclusivamente de `back-busqueda`** (y de los documentos cargados por organización/sede), que alimenta dinámicamente al LLM en cada consulta.
 2. **Consumidores del Chat y Widget (Frontends, Portales Web)**: Flujo genérico de dos pasos (`auth-service` + `back-chat`) diseñado para funcionar con una petición mínima (`-d '{}'` en sesión y `{"query": "..."}` en chat), además de campos enriquecidos opcionales (`user`, `context`, `logs`, `extras`) y compatibilidad retroactiva para integraciones como **SIGIRES**.
 3. **Administradores y Observabilidad**: Autenticación administrativa (`GLOBAL_ADMIN` / `ORG_ADMIN`), creación de usuarios administradores y consulta de métricas y auditoría.
@@ -15,11 +15,11 @@ Este documento contiene la colección completa de peticiones `cURL` para tres au
 
 | Microservicio | Puerto Base | Protocolo / Uso |
 |---|---|---|
-| **`auth-service`** | `http://localhost:8002` | Handshake de widgets (`POST /api/v1/widget/session`), auth/gestión de administradores y gestión de organizaciones/sedes (`/api/v1/admin/organizations`, `/api/v1/admin/sites`). |
-| **`back-chat`** | `http://localhost:8000` | Orquestador de chat multi-organización (`POST /api/v1/chat/stream`, `POST /api/v1/chat/query`, alias `/api/v1/diagnostic/*`), carga de documentos (`/api/v1/admin/documents`) y proxy de observabilidad. |
+| **`auth-service`** | `http://localhost:8002` | Handshake de widgets (`POST /api/v1/widget/session`), auth/gestión de administradores y organizaciones/sedes de Atenta (`/api/v1/admin/organizations`, `/api/v1/admin/sites`). |
+| **`back-chat`** | `http://localhost:8000` | Orquestador de chat Atenta (`POST /api/v1/chat/stream`, `POST /api/v1/chat/query`, alias `/api/v1/diagnostic/*`), carga de documentos (`/api/v1/admin/documents`) y proxy de observabilidad. |
 | **`back-busqueda`** | `http://localhost:8001` | Motor de búsqueda semántica / vectorial RAG (específico por organización). |
-| **`llm-gateway`** | `http://localhost:8003` | Gateway de inferencia LLM y contabilidad de tokens/costos por organización, sede, usuario y rol. |
-| **`front-admin`** | `http://localhost:5174` | Consola administrativa (`GLOBAL_ADMIN` / `ORG_ADMIN`) con nomenclatura adaptable (`Sedes`/`Tiendas`/`Talleres`/`IPS`/`Sucursales`), descargas CSV/JSON y carga de documentos. |
+| **`llm-gateway`** | `http://localhost:8003` | Gateway de inferencia LLM de Atenta y contabilidad de tokens/costos por organización, sede, usuario y rol. |
+| **`front-admin`** | `http://localhost:5174` | Consola administrativa de **Atenta** (`GLOBAL_ADMIN` / `ORG_ADMIN`) con nomenclatura adaptable (`Sedes`/`Tiendas`/`Talleres`/`IPS`/`Sucursales`), descargas CSV/JSON y carga de documentos. |
 
 ---
 

@@ -1,4 +1,4 @@
 """
-Routers package for SIGIRES Back Central.
+Routers package for Atenta Chat & RAG Gateway.
 FastAPI composition root and HTTP presentation layer.
 """

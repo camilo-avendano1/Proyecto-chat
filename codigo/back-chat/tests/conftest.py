@@ -1,5 +1,5 @@
 """
-Pytest configuration and shared fixtures for SIGIRES Back Central.
+Pytest configuration and shared fixtures for Atenta Chat & RAG Gateway.
 """
 
 import os

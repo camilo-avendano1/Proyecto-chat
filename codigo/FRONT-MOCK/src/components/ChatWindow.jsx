@@ -135,7 +135,7 @@ export default function ChatWindow({
       <div className="chat-banner">
         <div className="chat-banner-item">
           <Bot size={15} style={{ color: '#10b981' }} />
-          <span>Asistente Virtual SaaS • Búsqueda RAG Dinámica Multi-Cliente</span>
+          <span>Atenta • Asistente Virtual con Búsqueda RAG Multi-Organización</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -188,11 +188,11 @@ export default function ChatWindow({
               <Sparkles size={32} />
             </div>
             <h2 style={{ color: 'var(--text-bright)', fontSize: '1.25rem', marginBottom: '8px' }}>
-              Simulador del Asistente Virtual SaaS Multi-Cliente
+              Simulador de Atenta — Asistente Virtual
             </h2>
             <p style={{ fontSize: '0.85rem', lineHeight: '1.6', marginBottom: '20px' }}>
               Realiza consultas generales, flujos corporativos con contexto y extras JSON, o diagnóstico técnico de
-              formularios y logs (CSV, TXT, XML, JSON, ZIP). Los documentos se recuperan dinámicamente desde la búsqueda RAG de cada cliente.
+              formularios y logs (CSV, TXT, XML, JSON, ZIP). Los documentos se recuperan dinámicamente desde la búsqueda RAG de cada organización y sede.
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <button
@@ -462,7 +462,7 @@ export default function ChatWindow({
         <div className="input-box-wrapper">
           <textarea
             className="chat-input-textarea"
-            placeholder="Escribe tu consulta para el asistente virtual SaaS... (Presiona Enter para enviar)"
+            placeholder="Escribe tu consulta para Atenta... (Presiona Enter para enviar)"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -474,7 +474,7 @@ export default function ChatWindow({
               className="send-btn"
               onClick={() => onSendMessage(queryInput)}
               disabled={isStreaming || !queryInput.trim()}
-              title="Enviar consulta al Back Central"
+              title="Enviar consulta a Atenta (back-chat)"
             >
               <Send size={16} />
             </button>

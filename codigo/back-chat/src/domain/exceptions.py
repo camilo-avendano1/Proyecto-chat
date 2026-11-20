@@ -1,5 +1,5 @@
 """
-Domain exceptions for SIGIRES Back Central.
+Domain exceptions for Atenta Chat & RAG Gateway.
 """
 
 class DomainException(Exception):

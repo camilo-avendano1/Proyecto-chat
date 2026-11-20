@@ -1,6 +1,6 @@
-# FRONT-MOCK: Simulador y Consola Interactiva del Asistente Virtual SaaS Multi-Organización
+# Atenta — Simulador Interactivo del Widget (`FRONT-MOCK`)
 
-Este frontend interactivo desarrollado en **React + Vite** simula el widget embebido en distintas plataformas clientes (iniciando por defecto con la organización genérica **`otra_empresa`** e incluyendo presets de ejemplo por sector: salud **`sigires`**, retail y automotriz) y permite probar en vivo el flujo completo entre **`auth-service` (:8002)**, **`back-chat` (:8000)**, **`back-busqueda` (:8001)** y **`llm-gateway` (:8003)**.
+Este frontend interactivo de **Atenta** desarrollado en **React + Vite** simula el widget embebido en distintas plataformas clientes (iniciando por defecto con la organización genérica **`otra_empresa`** e incluyendo presets de ejemplo por sector: salud **`sigires`**, retail y automotriz) y permite probar en vivo el flujo completo entre **`auth-service` (:8002)**, **`back-chat` (:8000)**, **`back-busqueda` (:8001)** y **`llm-gateway` (:8003)**.
 
 ---
 

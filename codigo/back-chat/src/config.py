@@ -1,5 +1,5 @@
 """
-Configuration settings for SaaS Core Back Central.
+Configuration settings for Atenta Chat & RAG Gateway (back-chat).
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 Managed via Pydantic Settings.
 """
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     )
 
     SERVICE_NAME: str = "back-chat"
-    APP_NAME: str = "Core SaaS Chat & Diagnostic Gateway (Back Central)"
+    APP_NAME: str = "Atenta Chat & RAG Gateway (Back Central)"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
     HOST: str = "0.0.0.0"

@@ -1,6 +1,6 @@
-# Consola Administrativa Multi-Organización (`front-admin`)
+# Atenta — Consola Administrativa (`front-admin`)
 
-Consola web en **React + Vite** (puerto **5174**) destinada a las cuentas administradoras (**`GLOBAL_ADMIN`** / *Admin Global* y **`ORG_ADMIN`** / *Administrador*) de la plataforma SaaS Core Chat & RAG Gateway, con etiquetas dinámicas por organización (`Sede/Sedes`, `Tienda/Tiendas`, `Taller/Talleres`, `Sucursal/Sucursales`, `Clínica/Clínicas`, `IPS/IPS`).
+Consola web en **React + Vite** (puerto **5174**) destinada a las cuentas administradoras (**`GLOBAL_ADMIN`** / *Admin Global* y **`ORG_ADMIN`** / *Administrador*) de **Atenta**, con etiquetas dinámicas por organización (`Sede/Sedes`, `Tienda/Tiendas`, `Taller/Talleres`, `Sucursal/Sucursales`, `Clínica/Clínicas`, `IPS/IPS`).
 
 ---
 

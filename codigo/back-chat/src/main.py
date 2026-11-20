@@ -1,7 +1,7 @@
 """
-Main FastAPI Application Entry Point for SaaS Core Back Central.
+Main FastAPI Application Entry Point for Atenta Chat & RAG Gateway (back-chat).
 Developed by: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
-Follows Clean Architecture, modern lifespan context management, multi-client routing,
+Follows Clean Architecture, modern lifespan context management, multi-organization routing,
 audit logging, and advanced error handling.
 """
 
@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
     logger.info("Guardrails y Fast-Path para Saludos / Fuera de Dominio: ACTIVO")
     logger.info("================================================================")
     yield
-    logger.info("Cerrando SaaS Core Back Central...")
+    logger.info("Cerrando Atenta Chat & RAG Gateway...")
     from src.core.audit import audit_logger as persistent_audit_logger
     persistent_audit_logger.flush()
 
@@ -98,11 +98,10 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=(
-        "Core Backend SaaS Multi-Cliente y Gateway de Chat RAG y Diagnóstico en tiempo real. "
+        "Atenta — Orquestador de Chat RAG y Diagnóstico en tiempo real multi-organización y multi-sede. "
         "Desarrollado por Juan Camilo Avendaño, Fran Sneider Quincha y Adriana Moreno. "
-        "Orquesta consultas conversacionales y técnicas para múltiples clientes empresariales. "
-        "Gestiona sesiones multi-cliente, sanitiza PII (Ley 1581 de 2012), enruta búsquedas RAG a las APIs correspondientes, "
-        "aplica Guardrails de seguridad contra inyecciones y filtra consultas triviales para ahorro de tokens."
+        "Gestiona sesiones de widget, sanitiza PII (Ley 1581 de 2012), enruta búsquedas RAG y documentos por sede, "
+        "aplica Guardrails de seguridad contra inyecciones y ofrece respuestas directas sin costo para consultas triviales."
     ),
     lifespan=lifespan,
     docs_url="/docs",

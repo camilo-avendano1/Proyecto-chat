@@ -1,6 +1,6 @@
 # Flujo de Información, System Prompt e Integración con Back - Búsqueda (RAG)
 
-Este documento explica cómo procesa la información el microservicio **`back-chat`**, por qué su diseño es genérico, multi-organización y multi-sede (desde una petición mínima `{"query": "..."}` hasta consultas enriquecidas con contexto, logs y `extras`), y cómo **`back-busqueda`** junto con los documentos cargados por sede proveen dinámicamente el conocimiento de cada asistente.
+Este documento explica cómo procesa la información **`back-chat`** dentro de **Atenta**, por qué su diseño es genérico, multi-organización y multi-sede (desde una petición mínima `{"query": "..."}` hasta consultas enriquecidas con contexto, logs y `extras`), y cómo **`back-busqueda`** junto con los documentos cargados por sede proveen dinámicamente el conocimiento de cada asistente.
 
 ---
 
@@ -124,7 +124,7 @@ El sistema separa estrictamente la orquestación conversacional del conocimiento
 │    Envía query + org_id + site_id + extras sanitizados            │
 │                                                                   │
 │ 4. PromptBuilder:                                                 │
-│    System Prompt (Asistente Virtual SaaS)                         │
+│    System Prompt (Atenta — Asistente Virtual)                     │
 │    + User Prompt (Contexto opcional + Fragmentos RAG)             │
 │                                                                   │
 │ 5. LLMGatewayClient -> llm-gateway (:8003):                       │

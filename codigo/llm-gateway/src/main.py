@@ -1,5 +1,5 @@
 """
-Main FastAPI Application Entry Point for SaaS LLM Gateway.
+Main FastAPI Application Entry Point for Atenta LLM Gateway.
 Port: 8003
 Desarrollado por: Juan Camilo Avendaño, Fran Sneider Quincha, Adriana Moreno.
 """
@@ -84,7 +84,7 @@ async def lifespan(app: FastAPI):
     logger.info("Usage Ledger inicializado correctamente.")
     logger.info("================================================================")
     yield
-    logger.info("Cerrando SaaS LLM Gateway...")
+    logger.info("Cerrando Atenta LLM Gateway...")
     audit_logger.close()
     get_db_instance().dispose()
 
@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Microservicio Gateway de Modelos de Lenguaje e Ingesta de Consumo.",
+    description="Microservicio Gateway de Modelos de Lenguaje y Contabilidad de Consumo de Atenta.",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

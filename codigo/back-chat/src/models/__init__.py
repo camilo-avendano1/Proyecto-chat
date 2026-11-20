@@ -1,3 +1,3 @@
 """
-Pydantic models package for SIGIRES Back Central.
+Pydantic models package for Atenta Chat & RAG Gateway.
 """

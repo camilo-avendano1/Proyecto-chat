@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     SERVICE_NAME: str = "auth-service"
-    APP_NAME: str = "SaaS Auth Service (Usuarios Widget y Administradores)"
+    APP_NAME: str = "Atenta Auth Service (Sesiones de Widget y Administradores)"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
     HOST: str = "0.0.0.0"
